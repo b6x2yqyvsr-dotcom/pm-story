@@ -12,6 +12,7 @@
     pm_storykit.entries   条目操作（列莫蒂等，剧情编辑器要用）
     pm_storykit.effects   技能效果两种编码互转
     pm_storykit.diagnose  检测来源够不够用（APK 是不是完整版）
+    pm_storykit.export    四种导出方式（UnityCache / 模组包 / CDN / 重打包 APK）
     pm_storykit.fields    字段中英文对照
     pm_storykit.story     **单人剧情本体**：任务对白 / 训练师 / 皮肤 / 地图
 """
@@ -25,6 +26,7 @@ from . import (  # noqa: F401
     diagnose,
     effects,
     entries,
+    export,
     fields,
     modpack,
     paths,

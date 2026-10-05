@@ -206,11 +206,23 @@ def cmd_diagnose(a) -> int:
 
 
 def cmd_export(a) -> int:
+    from pm_storykit import export as EX
+
     s = _open(a.paths, a.lang)
-    r = s.output_cache(a.out, allow_broken=True)
-    print(f"\n  ✓ 导出到 {r['dir']}（{len(r['written'])} 个包）")
-    print("      adb push 到设备的 files/UnityCache 即生效，不用重装 APK")
-    return 0
+    if a.how == "list":
+        print("\n  四种导出方式：")
+        for k in EX.catalog():
+            mark = "✓" if k["ok"] else "✗"
+            print(f"    {mark} {k['key']:<9} {k['label']:<16} {k['hint']}")
+            if not k["ok"]:
+                print(f"        {k['why']}")
+        return 0
+    r = EX.run(s, a.how, a.out, name=a.name or "剧情模组")
+    print()
+    for line in (r.get("message") or "").split("\n"):
+        if line.strip():
+            print("  " + line)
+    return 0 if r.get("ok") else 1
 
 
 def main() -> int:
@@ -265,9 +277,13 @@ def main() -> int:
     common(p)
     p.set_defaults(fn=cmd_diagnose)
 
-    p = sub.add_parser("export", help="导出改好的包")
+    p = sub.add_parser("export", help="导出（四种方式）")
     common(p)
-    p.add_argument("-o", "--out", required=True)
+    p.add_argument("-o", "--out", default="导出", help="输出目录")
+    p.add_argument("--how", default="list",
+                   choices=["list", "cache", "modpack", "cdn", "apk"],
+                   help="哪种方式；不填就列出来")
+    p.add_argument("--name", help="模组包名字")
     p.set_defaults(fn=cmd_export)
 
     a = ap.parse_args()

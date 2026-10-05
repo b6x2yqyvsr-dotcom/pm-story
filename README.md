@@ -197,6 +197,44 @@ WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_4            如果我能把刚才捡到的
    —— 游戏走到那一步会显示成 ID
 ```
 
+## 四种导出方式
+
+改完剧情之后，产物可以按四种方式出来 —— 对应四种「怎么让游戏用上」：
+
+| 方式 | 产出 | 什么时候用 | 要额外工具吗 |
+|---|---|---|---|
+| **UnityCache 目录** | `UnityCache/Shared/<包>/<目录名>/__data` | 推到手机上，**不用重装** | 不要 |
+| **.pmmod 模组包** | 一个文件 | 发给别人用 | 不要 |
+| **CDN 目录** | `AssetBundles/<group>/Android/*` | 自建服务器分发 | 不要 |
+| **重打包 APK** | 签名好的新 APK | 想直接安装 | **要 JDK + build-tools** |
+
+前三种**哪台机器都能跑**。重打包要 `apksigner` / `zipalign` / `java`，
+手机上一般没有 —— 所以手机上那一项会**自己置灰并说明原因**，不会让你点了才发现不行。
+
+三个地方都能用：
+
+```bash
+# 命令行：先看有哪几种
+python3 tools/cli.py export 加强版.apk --how list
+
+# 选一种
+python3 tools/cli.py export 加强版.apk --how cache   -o 导出目录
+python3 tools/cli.py export 加强版.apk --how modpack --name 我的剧情 -o 导出目录
+python3 tools/cli.py export 加强版.apk --how cdn     -o 导出目录
+python3 tools/cli.py export 加强版.apk --how apk     -o 导出目录
+```
+
+- **桌面版**：工具栏「导出…」选目录 → 四种方式单选 → 开始导出
+- **网页版**：首页第 ③ 步直接列四张卡片，点了就导，导完给下载按钮
+
+### 还没改任何东西时会拦住
+
+```
+✗ 还没有改任何东西 —— 先去改点剧情，再回来导出。
+```
+
+而不是给你一个「导出 0 个包」然后让你纳闷。
+
 ## 自动检测：这个 APK 是完整版吗
 
 ![来源检测](docs/界面截图-来源检测.png)

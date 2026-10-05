@@ -157,6 +157,12 @@ class StoryApp:
         self.show_story = False
         self.diag = None
         self.show_diag = False
+        self.show_export = False
+        self.export_dir = ""
+        self.export_kinds = None
+        self.export_name = "我的剧情模组"
+        self.export_pick = ""
+        self.export_msg = ""
         self._st_reset()
         self.autotest = int(os.environ.get("PM_STORYKIT_AUTOTEST", "0") or "0")
         self._frame = 0
@@ -257,6 +263,8 @@ class StoryApp:
             self._draw_story()
         if self.show_diag:
             self._draw_diag()
+        if self.show_export:
+            self._draw_export()
 
         if self.autotest:
             self._frame += 1
@@ -288,18 +296,73 @@ class StoryApp:
             self.diag = DG.inspect(self.sess)
             self.show_diag = True
         _tip("看看这个 APK 是不是完整版；\n不是的话，哪些改动装不进 APK")
-        imgui.same_line()
-        if imgui.button("导出…"):
-            d = pfd.select_folder("导出到哪个目录")
-            if d.result():
-                self.start("导出中…", lambda: self._export(d.result()))
-        _tip("输出 UnityCache 目录，adb push 到设备即生效，不用重装 APK")
         imgui.end_disabled()
         imgui.same_line()
         if self.sess.source is not None:
             _text_colored(DIM, "  " + (self.sess.source.summary()
                                        if hasattr(self.sess.source, "summary") else ""))
         imgui.separator()
+
+    def _draw_export(self) -> None:
+        """四种导出方式。"""
+        from pm_storykit import export as EX
+
+        _center_next_window(imgui.ImVec2(700, 560))
+        opened, self.show_export = imgui.begin("导出", self.show_export)
+        if not opened:
+            imgui.end()
+            return
+        if self.export_kinds is None:
+            self.export_kinds = EX.catalog()
+
+        imgui.text("导出到哪里")
+        imgui.same_line()
+        _mono(self.export_dir or "（没选）")
+        imgui.separator()
+        _text_colored(DIM, "四种方式，对应四种「怎么让游戏用上」。"
+                           "前三种不需要任何额外工具。")
+        imgui.spacing()
+
+        for k in self.export_kinds:
+            on = self.export_pick == k["key"]
+            if not k["ok"]:
+                imgui.begin_disabled()
+            if imgui.radio_button(f"{k['label']}##ex{k['key']}", on):
+                self.export_pick = k["key"]
+            if not k["ok"]:
+                imgui.end_disabled()
+            _mono("  " + k["key"])
+            imgui.text("      " + (k["hint"] if k["ok"] else k["why"]))
+            imgui.spacing()
+
+        if self.export_pick == "modpack":
+            imgui.set_next_item_width(-1)
+            _, self.export_name = imgui.input_text("##exname", self.export_name)
+            imgui.same_line()
+            _mono("模组包名字")
+
+        imgui.separator()
+        imgui.begin_disabled(not self.export_dir or not self.export_pick or self.busy())
+        if imgui.button("开始导出", imgui.ImVec2(130, 0)):
+            k = self.export_pick
+            self.start("导出中…（重打包 APK 要半分钟）",
+                       lambda: self._do_export(k))
+        imgui.end_disabled()
+        imgui.same_line()
+        if imgui.button("关闭"):
+            self.show_export = False
+        if self.export_msg:
+            for line in self.export_msg.split("\n"):
+                _text_colored(GREEN if line.startswith("✓") else
+                              (WARN if "✗" in line else DIM), "  " + line)
+        imgui.end()
+
+    def _do_export(self, how: str) -> str:
+        from pm_storykit import export as EX
+
+        r = EX.run(self.sess, how, self.export_dir, name=self.export_name)
+        self.export_msg = r.get("message") or ""
+        return self.export_msg
 
     def _draw_diag(self) -> None:
         """来源检测报告。"""

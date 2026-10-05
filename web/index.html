@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>口蘑剧情工坊</title>
+<meta name="theme-color" content="#16161a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="剧情工坊">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<style>
+  :root{
+    --bg:#16161a; --bg2:#1e1e24; --bg3:#26262e; --line:#34343e;
+    --fg:#e6e6ea; --dim:#9a9aa6; --y:#ffd426; --g:#5cdb80; --w:#ffb84d; --e:#ff6b6b;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--fg);font:16px/1.55 -apple-system,BlinkMacSystemFont,
+    "PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;
+    display:flex;flex-direction:column;height:100dvh;overflow:hidden}
+  header{padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top));
+    background:var(--bg2);border-bottom:1px solid var(--line);flex:none}
+  header h1{font-size:17px;margin:0;font-weight:700}
+  header .sub{font-size:12.5px;color:var(--dim);margin-top:2px}
+  main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px}
+  .step{display:flex;align-items:baseline;gap:8px;font-weight:700;margin:18px 0 8px;color:var(--y)}
+  .step:first-child{margin-top:2px}
+  .step .n{font-size:17px}
+  .step small{color:var(--dim);font-weight:400;font-size:12.5px}
+  .drop{border:2px dashed var(--line);border-radius:14px;padding:30px 18px;text-align:center;
+    background:var(--bg2);cursor:pointer;transition:.15s}
+  .drop.on{border-color:var(--y);background:rgba(255,212,38,.08)}
+  .drop b{display:block;font-size:17px;color:var(--y);margin-bottom:6px}
+  .drop span{color:var(--dim);font-size:13px}
+  .btn{display:block;width:100%;padding:14px;border-radius:11px;border:1px solid var(--line);
+    background:var(--bg3);color:var(--fg);font-size:16px;font-weight:600;cursor:pointer;margin-top:10px}
+  .btn:active{transform:scale(.99)}
+  .btn.primary{background:#1d4a2b;border-color:#2c6b3e;color:#c9f5d6}
+  .btn.y{background:rgba(255,212,38,.14);border-color:rgba(255,212,38,.5);color:var(--y)}
+  .card{background:var(--bg2);border:1px solid var(--line);border-radius:12px;
+    padding:13px 14px;margin-bottom:10px;cursor:pointer}
+  .card:active{background:var(--bg3)}
+  .card .t{font-size:16px;font-weight:600}
+  .card .d{font-size:12.5px;color:var(--dim);margin-top:2px}
+  .card .n{float:right;color:var(--g);font-weight:600;font-size:14px}
+  .row{display:flex;align-items:center;gap:8px}
+  .row .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .i{color:var(--dim);font-size:12.5px;flex:none}
+  .tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;
+    background:var(--bg3);color:var(--dim);margin-left:6px}
+  .tag.ok{color:var(--g)} .tag.warn{color:var(--w)} .tag.err{color:var(--e)}
+  label{display:block;font-size:13px;color:var(--dim);margin:12px 0 4px}
+  label b{color:var(--fg);font-weight:600;font-size:14px}
+  label .en{font-family:var(--mono);font-size:11px;color:var(--dim);margin-left:6px}
+  input,textarea,select{width:100%;padding:11px;border-radius:9px;border:1px solid var(--line);
+    background:var(--bg3);color:var(--fg);font-size:15px;font-family:inherit}
+  textarea{min-height:74px;resize:vertical}
+  input[type=range]{padding:0;accent-color:var(--y);background:none;border:0;height:28px}
+  .bar{position:sticky;bottom:0;background:linear-gradient(transparent,var(--bg) 25%);
+    padding:12px 0 6px;padding-bottom:calc(6px + env(safe-area-inset-bottom));display:flex;gap:8px}
+  .bar .btn{margin-top:0}
+  .muted{color:var(--dim);font-size:13px}
+  .kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .kv .k{color:var(--dim)} .kv .v{color:var(--g);font-weight:600;text-align:right}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);max-width:92vw;
+    background:var(--bg3);border:1px solid var(--line);border-radius:11px;padding:12px 16px;
+    font-size:14px;display:none;z-index:99;white-space:pre-wrap;box-shadow:0 8px 26px rgba(0,0,0,.5)}
+  #busy{position:fixed;inset:0;background:rgba(10,10,14,.66);display:none;z-index:98;
+    align-items:center;justify-content:center;font-size:16px;color:var(--y)}
+  #busy.on{display:flex}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .full{grid-column:1/-1}
+  .chip{display:inline-block;padding:5px 12px;border-radius:999px;background:var(--bg3);
+    color:var(--dim);font-size:13px;margin:0 6px 6px 0;cursor:pointer;border:1px solid transparent}
+  .chip.on{background:rgba(255,212,38,.14);color:var(--y);border-color:rgba(255,212,38,.45)}
+</style>
+</head>
+<body>
+<header>
+  <h1>口蘑剧情工坊</h1>
+  <div class="sub" id="sub">第 1 步：先把游戏文件打开</div>
+</header>
+<main id="main"></main>
+<div id="toast"></div>
+<div id="busy">处理中…</div>
+<div id="dropmask" style="position:fixed;inset:0;z-index:97;display:none;background:rgba(10,10,14,.85);
+  align-items:center;justify-content:center;text-align:center;padding:24px">
+  <div style="border:2px dashed var(--y);border-radius:14px;padding:36px 28px;color:var(--y);
+    font-size:18px;font-weight:700">松手就加进来<div class="muted" style="margin-top:8px;font-weight:400">
+    支持 .apk / .zip，可一次多个</div></div>
+</div>
+<script>
+const $ = s => document.querySelector(s);
+let S = {state:null, tab:"", item:null, lang:"ZH_CN", allLangs:false, view:"home", exportHow:""};
+
+function esc(s){return String(s??"").replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+function toast(msg, ms=5000){const t=$("#toast");t.textContent=msg;t.style.display="block";
+  clearTimeout(t._h);t._h=setTimeout(()=>t.style.display="none",ms);}
+function busy(on,label){const b=$("#busy");b.textContent=label||"处理中…";b.classList.toggle("on",!!on);}
+async function api(path, body){
+  const r = await fetch(path, body===undefined ? undefined : {
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  const d = await r.json();
+  if(d && d.ok === false) throw new Error(d.error || "操作失败");
+  return d;
+}
+async function run(label, fn){
+  busy(true,label);
+  try{ await fn(); }
+  catch(e){ toast("✗ "+e.message, 7000); }
+  finally{ busy(false); }
+}
+
+// ---------------------------------------------------------------- 渲染
+function render(){
+  if(!S.state || !S.state.opened) return renderHome();
+  if(S.view==="home") return renderTabs();
+  if(S.view==="list") return renderList();
+  if(S.view==="edit") return renderEdit();
+}
+function renderHome(){
+  $("#sub").textContent = "第 1 步：先把游戏文件打开";
+  $("#main").innerHTML = `
+    <div class="step"><span class="n">①</span> 打开游戏文件
+      <small>APK 或数据包 zip</small></div>
+    <div class="drop" id="dz">
+      <b>把文件拖到这里</b>
+      <span>或者点这里选文件</span>
+      <input type="file" id="fi" multiple accept=".apk,.zip,.tar,.gz" style="display:none">
+    </div>
+    <button class="btn" id="pick">选择文件…</button>
+    <div class="muted" style="margin-top:14px">
+      提示：官方客户端 / 精简版 APK 里只有 <code>text</code>，
+      剧情数据表（<code>spdata</code>）不在里面 —— 打开后会自动告诉你哪些改不了。
+    </div>`;
+  const dz=$("#dz"), fi=$("#fi");
+  dz.onclick=()=>fi.click();
+  $("#pick").onclick=()=>fi.click();
+  fi.onchange=()=>{ if(fi.files.length) upload(fi.files); };
+}
+async function upload(files){
+  await run("接收文件…", async()=>{
+    const fd=new FormData();
+    [...files].forEach(f=>fd.append("files", f, f.name));
+    const r=await fetch("/api/upload-many",{method:"POST",body:fd}).then(x=>x.json());
+    if(!r.ok) throw new Error(r.error||"打开失败");
+    await refresh();
+    toast(`✓ 已打开 ${files.length} 个文件`, 4000);
+  });
+}
+function renderTabs(){
+  const st=S.state;
+  $("#sub").textContent = st.complete ? "✓ 完整版，改完直接导出" : "⚠ 不是完整版，部分内容改不了";
+  const tag = st.complete ? `<span class="tag ok">完整版</span>`
+                          : `<span class="tag warn">非完整版</span>`;
+  let h = `<div class="step"><span class="n">②</span> 点一个分类开始改</div>
+    <div class="card" style="cursor:default">
+      <div class="t">${esc((st.files||[]).map(f=>f.split("/").pop()).join("、"))}${tag}</div>
+      <div class="d">${st.bundles} 个资源包${st.modified?.length?` · 已改 ${st.modified.length} 个`:""}</div>
+    </div>`;
+  if(!st.complete && st.blocked?.length){
+    h += `<div class="card" style="cursor:default;border-color:var(--w)">
+      <div class="t" style="color:var(--w)">这些还用不了</div>
+      <div class="d">${esc(st.blocked.join("、"))}<br>
+      把「口蘑数据包.zip」一起拖进来就能改。</div></div>`;
+  }
+  for(const t of st.tabs){
+    const n = st.counts?.[t.key];
+    h += `<div class="card" data-tab="${t.key}">
+      <div class="t">${esc(t.label)}<span class="n">${n!=null?n+" 条":"—"}</span></div>
+      <div class="d">${esc(t.hint)}</div></div>`;
+  }
+  h += `<div class="step"><span class="n">③</span> 导出
+      <small>四种方式，都不用装额外工具（重打包除外）</small></div>`;
+  for(const k of (st.export_kinds||[])){
+    h += `<div class="card" data-ex="${k.key}" ${k.ok?"":'style="opacity:.5"'}>
+      <div class="t">${esc(k.label)}${k.ok?"":'<span class="tag warn">不可用</span>'}</div>
+      <div class="d">${esc(k.ok ? k.hint : k.why)}</div></div>`;
+  }
+  h += `<div id="expbox"></div>
+    <button class="btn" id="reset" style="margin-top:14px">换一个文件重新开始</button>`;
+  $("#main").innerHTML = h;
+  document.querySelectorAll("[data-tab]").forEach(el=>el.onclick=()=>openTab(el.dataset.tab));
+  document.querySelectorAll("[data-ex]").forEach(el=>el.onclick=()=>{
+    const k=(st.export_kinds||[]).find(x=>x.key===el.dataset.ex);
+    if(k && !k.ok){ toast("✗ "+k.why, 8000); return; }
+    pickExport(k);
+  });
+  $("#reset").onclick=()=>run("重置…",async()=>{await api("/api/reset",{});S.view="home";await refresh();});
+}
+async function openTab(tab){
+  S.tab=tab;
+  await run("读取列表…", async()=>{
+    const r=await api("/api/list?tab="+encodeURIComponent(tab));
+    S.list=r.items||[]; S.view="list"; render();
+  });
+}
+function renderList(){
+  const t = S.state.tabs.find(x=>x.key===S.tab);
+  $("#sub").textContent = `第 2 步：选一条要改 · ${t?t.label:""}`;
+  let h = `<button class="btn" id="back" style="margin:0 0 12px">← 返回分类</button>`;
+  if(!S.list.length){
+    h += `<div class="card" style="cursor:default"><div class="d">
+      这个分类下没有条目 —— 多半是 <code>spdata</code> 不在你打开的文件里。</div></div>`;
+  }
+  for(const it of S.list){
+    h += `<div class="card" data-id="${esc(it.id)}"><div class="row">
+      <div class="t">${esc(it.name)}</div><div class="i">${esc(it.info||"")}</div>
+    </div></div>`;
+  }
+  $("#main").innerHTML = h;
+  $("#back").onclick=()=>{S.view="home";render();};
+  document.querySelectorAll("[data-id]").forEach(el=>el.onclick=()=>openItem(el.dataset.id));
+}
+async function openItem(id){
+  await run("读取内容…", async()=>{
+    S.item = await api(`/api/get?tab=${encodeURIComponent(S.tab)}&id=${encodeURIComponent(id)}`);
+    S.view="edit"; render();
+  });
+}
+function fieldHtml(f, val){
+  const ctl = f.multiline
+    ? `<textarea data-f="${esc(f.name)}">${esc(val)}</textarea>`
+    : `<input data-f="${esc(f.name)}" value="${esc(val)}">`;
+  return `<label><b>${esc(f.label||f.name)}</b>
+    ${f.label===f.name?"":`<span class="en">${esc(f.name)}</span>`}</label>${ctl}`;
+}
+function renderEdit(){
+  const it = S.item;
+  $("#sub").textContent = "第 3 步：改完点下面的「应用」";
+  let h = `<button class="btn" id="back" style="margin:0 0 12px">← 返回列表</button>
+    <div class="step" style="margin-top:0">${esc(it.name||it.id)}</div>`;
+
+  if(it.kind==="lineup") return renderLineup(it, h);
+  if(it.kind==="table"){
+    h += `<div class="muted">这一组不是纯文本，下面是内容和可改的文本。</div>`;
+    for(const r of it.rows||[]){
+      const bits = [r.team?`队伍 ${r.team.length} 只`:"", r.size||"", r.theme||""].filter(Boolean);
+      h += `<div class="kv"><span class="k">${esc(r.id)}</span><span class="v">${esc(bits.join(" · "))}</span></div>`;
+    }
+  }
+  if(it.fields?.length){
+    h += `<div class="step"><span class="n">✎</span> 文本</div>`;
+    for(const f of it.fields) h += fieldHtml(f, f.value);
+  }
+  if(it.team && it.team.length){
+    h += `<div class="step"><span class="n">⚔</span> 出场队伍</div>`;
+    h += `<div id="team"></div><button class="btn" id="addm">+ 加一只</button>`;
+  }
+  if(it.extra && it.extra.themes){
+    const e=it.extra;
+    h += `<div class="step"><span class="n">🗺</span> 地图</div>
+      <div class="grid2">
+        <div><label><b>宽</b></label><input type="number" id="mw" value="${e.w||15}"></div>
+        <div><label><b>深</b></label><input type="number" id="mh" value="${e.h||15}"></div>
+      </div>
+      <label><b>主题</b></label>
+      <select id="mtheme">${(e.themes||[]).map(x=>`<option ${x===e.theme?"selected":""}>${esc(x)}</option>`).join("")}</select>
+      <label><b>节点配额</b><span class="en">-1 = 不限</span></label>
+      <div id="mlim"></div>`;
+  } else if(it.extra){
+    h += `<div class="step"><span class="n">✎</span> 数据</div>`;
+    for(const [k,v] of Object.entries(it.extra))
+      h += `<label><span class="en">${esc(k)}</span></label><input data-x="${esc(k)}" value="${esc(v)}">`;
+  }
+  h += `<div class="bar">
+      <button class="btn y" id="alllangs" style="flex:0 0 auto;padding:14px 12px;font-size:13px">
+        ${S.allLangs?"☑":"☐"} 全部11语言</button>
+      <button class="btn primary" id="apply" style="flex:1">应用</button>
+    </div>`;
+  $("#main").innerHTML = h;
+  $("#back").onclick=()=>{S.view="list";render();};
+  $("#alllangs").onclick=()=>{S.allLangs=!S.allLangs;renderEdit();};
+  $("#apply").onclick=()=>doApply();
+  if(it.team){ renderTeam(); $("#addm").onclick=()=>{it.team.push({id:"",level:5});renderTeam();}; }
+  if(it.extra?.themes) renderLimits();
+}
+function renderTeam(){
+  const it=S.item, box=$("#team"); if(!box) return;
+  box.innerHTML = it.team.map((m,i)=>`
+    <div class="grid2" style="margin-bottom:8px">
+      <input data-m="${i}" value="${esc(m.id)}" placeholder="MortyXxx">
+      <div class="row"><input type="number" data-l="${i}" value="${m.level||1}" style="flex:1">
+      <button class="btn" style="width:auto;margin:0;padding:11px 14px" data-del="${i}">×</button></div>
+    </div>`).join("");
+  box.querySelectorAll("[data-m]").forEach(el=>el.oninput=()=>it.team[+el.dataset.m].id=el.value);
+  box.querySelectorAll("[data-l]").forEach(el=>el.oninput=()=>it.team[+el.dataset.l].level=+el.value);
+  box.querySelectorAll("[data-del]").forEach(el=>el.onclick=()=>{it.team.splice(+el.dataset.del,1);renderTeam();});
+}
+function renderLimits(){
+  const e=S.item.extra, box=$("#mlim"); if(!box) return;
+  const LAB={MORTY:"野生莫蒂",TRAINER:"训练师",NPC:"NPC",ITEM_PART_OR_CRATE:"物品/箱子",
+    QUEST_GIVER:"任务给予者",PORTAL:"传送门",SIGN_POST:"路牌",GYM:"道馆",GACHA_OR_CRAFT:"抽卡/合成"};
+  box.innerHTML = Object.keys(e.limits||LAB).map(k=>`
+    <div class="row" style="margin-bottom:6px">
+      <div class="t">${esc(LAB[k]||k)}</div>
+      <input type="number" data-lim="${esc(k)}" value="${e.limits?.[k]??-1}" style="width:96px">
+    </div>`).join("");
+  box.querySelectorAll("[data-lim]").forEach(el=>
+    el.oninput=()=>{ e.limits=e.limits||{}; e.limits[el.dataset.lim]=+el.value; });
+}
+function renderLineup(it, h){
+  h += `<div class="step"><span class="n">⚔</span> 对方阵容 <small>这个直接能改</small></div>`;
+  for(const op of it.opponents||[]){
+    h += `<div class="card" style="cursor:default"><div class="t">${esc(op.name)}</div>
+      <div class="d">${esc(op.id)}</div><div id="op_${esc(op.id)}"></div></div>`;
+  }
+  h += `<div class="step"><span class="n">👾</span> 教程野怪</div>
+    <div class="muted">世界 ${esc(it.world.id)} ${esc(it.world.size)} 主题 ${esc(it.world.theme)}
+    · 配额 ${it.world.morty_quota<0?"不限":it.world.morty_quota}</div>
+    <div class="muted" style="margin-top:6px">对白点名：「他跟我长得一模一样，就是比我脏了一点」
+    → 邋遢莫蒂</div>`;
+  for(const c of it.candidates||[]){
+    const mark = c.id==="MortyScruffy" ? "●" : "○";
+    h += `<div class="kv"><span class="k">${mark} ${esc(c.name)}</span>
+      <span class="v">${esc(c.id)} · 编号${esc(c.number)} 体力${esc(c.hp)} 攻击${esc(c.atk)}</span></div>`;
+  }
+  h += `<div class="muted" style="margin-top:10px">
+    ⚠ 具体哪只写死在游戏脚本里，数据表里没有。<br>
+    但改这 4 只的数值/形象/名字，教程里的野怪会跟着变。</div>
+    <div class="bar"><button class="btn primary" id="apply" style="flex:1">应用</button></div>`;
+  $("#main").innerHTML = h;
+  $("#back").onclick=()=>{S.view="list";render();};
+  $("#apply").onclick=()=>doApply();
+  // 每个训练师一个队伍编辑器
+  for(const op of it.opponents||[]){
+    const box = document.getElementById("op_"+op.id);
+    const draw = ()=>{
+      box.innerHTML = (op.team||[]).map((m,i)=>`
+        <div class="grid2" style="margin-top:8px">
+          <input data-om="${esc(op.id)}_${i}" value="${esc(m.id)}">
+          <div class="row"><input type="number" data-ol="${esc(op.id)}_${i}" value="${m.level||1}" style="flex:1">
+          <button class="btn" style="width:auto;margin:0;padding:11px 14px" data-od="${esc(op.id)}_${i}">×</button></div>
+        </div>`).join("") +
+        `<button class="btn" data-oa="${esc(op.id)}" style="margin-top:8px">+ 加一只</button>`;
+      box.querySelectorAll("[data-om]").forEach(el=>el.oninput=()=>{
+        op.team[+el.dataset.om.split("_").pop()].id=el.value;});
+      box.querySelectorAll("[data-ol]").forEach(el=>el.oninput=()=>{
+        op.team[+el.dataset.ol.split("_").pop()].level=+el.value;});
+      box.querySelectorAll("[data-od]").forEach(el=>el.onclick=()=>{
+        op.team.splice(+el.dataset.od.split("_").pop(),1); draw();});
+      box.querySelector("[data-oa]").onclick=()=>{ op.team=op.team||[]; op.team.push({id:"",level:5}); draw(); };
+    };
+    op.team = op.team || [];
+    draw();
+  }
+}
+async function doApply(){
+  const it=S.item;
+  const fields={};
+  document.querySelectorAll("[data-f]").forEach(el=>fields[el.dataset.f]=el.value);
+  const body={tab:S.tab, id:it.id, kind:it.kind, fields, all_langs:S.allLangs};
+  if(it.team) body.team=it.team;
+  if(it.opponents) body.opponents=it.opponents;
+  if(it.extra){
+    if(it.extra.themes){
+      it.extra.w=+($("#mw")?.value||15); it.extra.h=+($("#mh")?.value||15);
+      it.extra.theme=$("#mtheme")?.value||"";
+    }
+    body.extra=it.extra;
+  }
+  await run("写入…", async()=>{
+    const r=await api("/api/set", body);
+    toast(r.message||"✓ 已应用", 5000);
+    await refresh();
+  });
+}
+function pickExport(k){
+  S.exportHow=k.key;
+  const box=$("#expbox");
+  let h = `<div class="card" style="cursor:default;border-color:var(--y)">
+    <div class="t" style="color:var(--y)">${esc(k.label)}</div>
+    <div class="d">${esc(k.hint)}</div>`;
+  if(k.ask_name) h += `<label><b>模组包名字</b></label>
+    <input id="expname" value="我的剧情模组" placeholder="给我的剧情模组起个名字">`;
+  if(k.ask_apk) h += `<div class="d" style="margin-top:8px">
+    会用你打开的那个 APK 作为底包重打包并签名。</div>`;
+  h += `<button class="btn primary" id="expgo" style="margin-top:12px">开始导出</button>
+    <button class="btn" id="expcancel">取消</button></div>`;
+  box.innerHTML=h;
+  $("#expcancel").onclick=()=>box.innerHTML="";
+  $("#expgo").onclick=()=>doExport(k);
+}
+
+async function doExport(k){
+  await run("导出中…（重打包 APK 要 30 秒左右）", async()=>{
+    const r=await api("/api/export",{how:k.key, name:($("#expname")?.value||"")});
+    if(!r.ok){ toast("✗ "+(r.message||"导出失败"), 9000); return; }
+    const isFile = /\.(pmmod|apk)$/i.test(r.path||"");
+    toast(r.message + "\n\n点下面的按钮把文件存下来。", 12000);
+    const a=document.createElement("a");
+    a.href="/api/download";
+    a.download = isFile ? (r.path||"export").split("/").pop() : "story-export.zip";
+    a.textContent = "下载" + (isFile ? " " + a.download : "导出结果（zip）");
+    a.className="btn primary"; a.style.textAlign="center"; a.style.textDecoration="none";
+    a.style.display="block"; a.style.marginTop="10px";
+    const box=$("#expbox"); if(box) box.appendChild(a);
+  });
+}
+async function refresh(){
+  S.state = await api("/api/state");
+  if(!S.state.opened){ S.view="home"; }
+  render();
+}
+
+// ---- 拖拽 ----------------------------------------------------------------
+(function(){
+  let depth=0;
+  const mask=$("#dropmask");
+  addEventListener("dragenter",e=>{
+    if(![...(e.dataTransfer?.types||[])].includes("Files"))return;
+    e.preventDefault(); depth++; mask.style.display="flex";
+    const dz=$("#dz"); if(dz) dz.classList.add("on");
+  });
+  addEventListener("dragover",e=>{
+    if(![...(e.dataTransfer?.types||[])].includes("Files"))return;
+    e.preventDefault(); e.dataTransfer.dropEffect="copy";
+  });
+  addEventListener("dragleave",e=>{
+    depth=Math.max(0,depth-1);
+    if(!depth){ mask.style.display="none"; const dz=$("#dz"); if(dz) dz.classList.remove("on"); }
+  });
+  addEventListener("drop",async e=>{
+    if(![...(e.dataTransfer?.types||[])].includes("Files"))return;
+    e.preventDefault(); depth=0; mask.style.display="none";
+    const files=[...(e.dataTransfer.files||[])];
+    if(files.length) await upload(files);
+  });
+})();
+
+// ---- PWA -----------------------------------------------------------------
+if("serviceWorker" in navigator)
+  addEventListener("load",()=>navigator.serviceWorker.register("./sw.js").catch(()=>{}));
+
+refresh().catch(e=>toast("✗ 连不上后端："+e.message, 8000));
+</script>
+</body>
+</html>

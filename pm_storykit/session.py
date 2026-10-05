@@ -211,10 +211,15 @@ class Session:
 
     # ------------------------------------------------------------ 出厂体检
     def check(self) -> "object":
-        """跑一遍数据表体检，返回 ``validate.Report``。"""
-        from . import validate as validate_mod
+        """跑一遍**剧情体检**。
 
-        return validate_mod.validate(self)
+        这里跟 pm-modkit 不同：本工具只管剧情，所以体检的是
+        「剧情表和文本对不对得上、教程阶段缺不缺段、训练师队伍里的人存不存在」，
+        而不是莫蒂/道具那几张表。
+        """
+        from . import story as story_mod
+
+        return story_mod.check(self)
 
     def guard(self, *, allow_broken: bool = False, what: str = "产物") -> "object":
         """出产物之前的守门人。

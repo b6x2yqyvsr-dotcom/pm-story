@@ -1,0 +1,16 @@
+{
+  "name": "口蘑剧情工坊",
+  "short_name": "剧情工坊",
+  "description": "Pocket Mortys 单人剧情编辑器：任务对白、对战训练师、我方皮肤、地图、新手教程",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#16161a",
+  "theme_color": "#16161a",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "./icon-180.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

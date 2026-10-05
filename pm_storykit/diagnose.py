@@ -174,7 +174,7 @@ def inspect(sess: Session) -> Report:
         label = str(getattr(c, "label", ""))
         low = label.lower()
         kind = ("APK" if low.endswith(".apk") else
-                "目录" if getattr(c, "is_dir", False) else "压缩包")
+                "目录" if getattr(c, "kind", "") == "dir" else "压缩包")
         bset = {n.split("/")[-1][: -len(".assetbundle")]
                 for n in c.names() if n.endswith(".assetbundle")}
         rep.files.append(SourceFile(label=Path(label).name, kind=kind, bundles=len(bset)))

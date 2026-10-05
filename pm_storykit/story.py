@@ -607,9 +607,51 @@ def set_trainer_team(sess: Session, trainer_id: str, team: list[dict]) -> str:
     return set_table_row(sess, "TrainerInfo", trainer_id, {"morties": format_team(team)})
 
 
+@dataclass
+class Report:
+    """体检结果。接口对齐 pm-modkit 的那套（``issues`` / ``errors`` / ``ok`` /
+    ``summary()``），因为 ``session.guard()`` 按那个接口调。"""
+
+    issues: list = field(default_factory=list)
+    checked: list = field(default_factory=list)
+
+    @property
+    def errors(self) -> list:
+        return self.issues
+
+    @property
+    def warnings(self) -> list:
+        return []
+
+    @property
+    def ok(self) -> bool:
+        return not self.issues
+
+    def summary(self) -> str:
+        if not self.issues:
+            return f"✓ 剧情体检通过（查了 {len(self.checked)} 处）"
+        return f"⚠ {len(self.issues)} 处要留意"
+
+
+@dataclass
+class _Issue:
+    text: str
+
+    def line(self) -> str:
+        return self.text
+
+
+def check(sess: Session, lang: str = "ZH_CN") -> Report:
+    """剧情体检（``session.guard()`` 出产物前会调）。返回带 Report 接口的对象。"""
+    return Report(issues=[_Issue(t) for t in validate(sess, lang)],
+                  checked=["剧情表 vs 文本", "教程阶段", "训练师队伍"])
+
+
 def validate(sess: Session, lang: str = "ZH_CN") -> list[str]:
     """体检：剧情表和文本对不对得上。"""
     issues: list[str] = []
+    if sess.source is None:
+        return issues          # 没打开来源就没什么可检的，别刷一堆噪音
     tx = read_texts(sess, lang)
     for sec in SECTIONS:
         if not sec.table:
