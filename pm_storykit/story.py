@@ -324,6 +324,21 @@ def format_team(team: list[dict]) -> str:
 # ---------------------------------------------------------------- 写
 
 
+def _norm_langs(langs) -> list[str]:
+    """把语言参数收成列表。
+
+    踩过：调用方把 ``"ZH_CN"`` 当字符串传进来，然后被当成
+    ``['Z','H','_','C','N']`` 逐个语言去查 —— 一个都不匹配，
+    **一声不响地什么都不写**。调用方还以为改上了。
+    所以这里显式挡一下。
+    """
+    if langs is None:
+        return ["ZH_CN"]
+    if isinstance(langs, str):
+        return [langs]
+    return list(langs)
+
+
 def set_texts(sess: Session, section_key: str, entry_id: str, values: dict[str, str],
               langs: list[str] | None = None) -> list[str]:
     """改一条剧情文本。
@@ -334,7 +349,7 @@ def set_texts(sess: Session, section_key: str, entry_id: str, values: dict[str, 
     sec = SECTION_BY_KEY.get(section_key)
     if sec is None:
         raise ValueError(f"不认识的段 {section_key!r}")
-    langs = langs or ["ZH_CN"]
+    langs = _norm_langs(langs)
     done: list[str] = []
     for lang in langs:
         b, data = _read_json(sess, "text", lang)
@@ -500,7 +515,7 @@ def tutorial_extras(sess: Session, lang: str = "ZH_CN") -> list[dict]:
 def set_textdef(sess: Session, key: str, value: str,
                 langs: list[str] | None = None) -> list[str]:
     """改 ``TextDefs``（教程文本）里的一条。"""
-    langs = langs or ["ZH_CN"]
+    langs = _norm_langs(langs)
     done: list[str] = []
     for lang in langs:
         b, data = _read_json(sess, "text", lang)
