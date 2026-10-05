@@ -350,6 +350,27 @@ class StoryApp:
             imgui.same_line()
             _mono("模组包名字")
 
+        # 选中的那种用不了（缺工具）→ 给个一键装的按钮
+        _pick = next((k for k in self.export_kinds
+                      if k["key"] == self.export_pick), None)
+        if _pick and not _pick["ok"]:
+            imgui.separator()
+            _text_colored(WARN, "  这种现在用不了：")
+            for line in _pick["why"].split("。"):
+                if line.strip():
+                    _text_colored(DIM, "    " + line.strip())
+            imgui.begin_disabled(self.busy())
+            if imgui.button("帮我装工具", imgui.ImVec2(130, 0)):
+                self.start("装 Android 打包工具…", self._install_tools)
+            imgui.end_disabled()
+            imgui.same_line()
+            _text_colored(DIM, "装 JDK + Android build-tools；手机上行不通的会自动跳过")
+            if self.export_msg:
+                for line in self.export_msg.split("\n")[-6:]:
+                    _text_colored(GREEN if "✓" in line else DIM, "  " + line)
+            imgui.end()
+            return
+
         imgui.separator()
         imgui.begin_disabled(not self.export_dir or not self.export_pick or self.busy())
         if imgui.button("开始导出", imgui.ImVec2(130, 0)):
@@ -365,6 +386,20 @@ class StoryApp:
                 _text_colored(GREEN if line.startswith("✓") else
                               (WARN if "✗" in line else DIM), "  " + line)
         imgui.end()
+
+    def _install_tools(self) -> str:
+        """跑 install_build_tools.py，把输出收进消息区。"""
+        import subprocess as _sp
+
+        script = Path(__file__).resolve().parent.parent / "tools" / "install_build_tools.py"
+        if not script.is_file():
+            return "✗ 找不到 tools/install_build_tools.py"
+        r = _sp.run([sys.executable, str(script)],
+                    capture_output=True, text=True, timeout=1800)
+        out = (r.stdout or "") + (r.stderr or "")
+        self.export_kinds = None          # 让清单重新算一遍可用性
+        tail = [l.rstrip() for l in out.split("\n") if l.strip()]
+        return "\n".join(tail[-14:]) or "（没有输出）"
 
     def _do_export(self, how: str) -> str:
         from pm_storykit import export as EX
@@ -448,6 +483,11 @@ class StoryApp:
         if self._frame == 1 and self.sess.source is not None:
             self.show_story = True
             self._st_reset()
+            if os.environ.get("PM_STORYKIT_SHOW_EXPORT") == "1":
+                self.export_dir = os.environ.get("PM_STORYKIT_SHOT_DIR") or str(
+                    Path.home() / "pm-storykit-导出")
+                self.export_kinds = None
+                self.show_export = True
             if os.environ.get("PM_STORYKIT_SHOW_DIAG") == "1":
                 from pm_storykit import diagnose as DG
 

@@ -36,7 +36,23 @@ PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python
   bad "有些包装不上，试着手动： $PY -m pip install -r requirements-web.txt"; }
 ok "依赖完成"
 
-step "3/3 自检"
+step "3/4 Android 打包工具（可选，只要 openjdk-17）"
+# 「重打包 APK」要 java。手机上另外两种原生工具用不上：
+#   - zipalign 是 x86_64 的，ARM 跑不了 → 自动用纯 Python 那份
+#   - apksigner.jar 单独取（见 install_build_tools.py）
+# 前三种导出完全不需要这步，失败也不拦。
+if [ "${PM_STORYKIT_SKIP_TOOLS:-0}" = "1" ]; then
+  echo "    已跳过（PM_STORYKIT_SKIP_TOOLS=1）"
+else
+  "$PY" tools/install_build_tools.py --check >/dev/null 2>&1 \
+    && echo "    ✓ 打包工具已就绪" \
+    || {
+      echo "    还缺 openjdk-17 —— 只有「重打包 APK」用得到。要装就跑："
+      echo "        $PY tools/install_build_tools.py"
+    }
+fi
+
+step "4/4 自检"
 "$PY" - <<'PYEOF'
 import sys
 sys.path.insert(0, ".")

@@ -22,7 +22,22 @@ echo "  [2/3] 安装依赖（第一次会下载约 100MB）"
 "$VPY" -m pip install -q -r requirements.txt || {
   echo "  依赖装失败。手动试试： $VPY -m pip install -r requirements.txt"; exit 1; }
 
-echo "  [3/3] 环境自检"
+echo "  [3/4] Android 打包工具（可选）"
+# 第四个导出方式「重打包 APK」要 JDK + build-tools。前三个不用，所以这步失败也不拦。
+# 想跳过：PM_STORYKIT_SKIP_TOOLS=1 bash setup.sh
+if [ "${PM_STORYKIT_SKIP_TOOLS:-0}" = "1" ]; then
+  echo "  已跳过（PM_STORYKIT_SKIP_TOOLS=1）"
+else
+  "$VPY" tools/install_build_tools.py --check >/dev/null 2>&1 \
+    && echo "  ✓ 打包工具已就绪，四种导出方式都能用" \
+    || {
+      echo "  还缺 JDK / Android build-tools —— 只有「重打包 APK」用得到，"
+      echo "  前三种导出不受影响。要装就跑："
+      echo "      $VPY tools/install_build_tools.py"
+    }
+fi
+
+echo "  [4/4] 环境自检"
 "$VPY" - <<'PYEOF'
 import sys
 sys.path.insert(0, ".")

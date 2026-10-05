@@ -169,7 +169,22 @@ def repack(
 def zipalign(apk: str | Path, *, alignment: int = 4) -> tuple[bool, str]:
     tool = find_build_tool("zipalign")
     if not tool:
-        return False, "找不到 zipalign（装 Android build-tools，或设置 ANDROID_HOME）"
+        # 没有官方 zipalign 就走纯 Python 那份。
+        # 手机上（Termux/ARM）必然走这条 —— Google 只出 x86_64 的 zipalign，
+        # 不是我们没装，是根本没有 ARM 版。
+        from . import zipalign as _zal
+
+        tmp = Path(str(apk) + ".aligned")
+        ok, msg = _zal.align(apk, tmp, align=alignment)
+        if not ok:
+            tmp.unlink(missing_ok=True)
+            return False, f"对齐失败：{msg}"
+        v, vm = _zal.verify(tmp, align=alignment)
+        if not v:
+            tmp.unlink(missing_ok=True)
+            return False, f"对齐后自检没过：{vm}"
+        tmp.replace(apk)
+        return True, msg + "（纯 Python 对齐，无官方 zipalign）"
     apk = Path(apk)
     tmp = apk.with_suffix(apk.suffix + ".aligned")
     env = _env_with_java()

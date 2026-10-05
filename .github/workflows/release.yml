@@ -58,6 +58,35 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: 装 Android 打包工具（第四个导出方式要用）
+        run: python tools/install_build_tools.py
+        continue-on-error: true
+
+      - name: 验证四种导出方式都能用
+        shell: bash
+        run: |
+          python - <<'PY'
+          import sys, pathlib
+          sys.path.insert(0, ".")
+          from pm_storykit import export as EX
+          ks = EX.catalog()
+          print(f"  导出方式 {len(ks)} 种：")
+          for k in ks:
+              print(f"    {'✓' if k['ok'] else '✗'} {k['key']:<9} {k['label']}")
+              if not k["ok"]:
+                  print(f"        {k['why'][:100]}")
+          assert len(ks) == 4, "导出方式数量不对"
+          # 前三种必须能跑；第四种看工具装没装上
+          hard = [k for k in ks if k["key"] != "apk"]
+          assert all(k["ok"] for k in hard), \
+              "前三种不该依赖任何外部工具：" + str([k["key"] for k in hard if not k["ok"]])
+          py = [k for k in ks if k["key"] == "apk"][0]
+          if py["ok"]:
+              print("  ✓ 第四种（重打包 APK）也能用")
+          else:
+              print("  · 第四种这次用不了（CI 上工具没装成），不影响发布")
+          PY
+
       - name: 打包
         run: python build/build_app.py --keep-build
 
@@ -136,10 +165,25 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: 检查手机端的打包工具逻辑
+        run: python tools/install_build_tools.py --check || true
+
       - name: 打手机端包
         run: |
           python tools/package_mobile.py -o dist
           ls -la dist/
+          # 纯 Python 的 zipalign 必须打进去 —— 手机上没有原生 zipalign，
+          # 第四个导出方式全靠它
+          python - <<'PY'
+          import zipfile, pathlib
+          z = zipfile.ZipFile("dist/pm-storykit-Android.zip")
+          names = z.namelist()
+          for need in ("pm_storykit/zipalign.py", "tools/install_build_tools.py",
+                       "android/termux-install.sh"):
+              hit = any(n.endswith(need) for n in names)
+              print(f"  {'✓' if hit else '✗'} {need}")
+              assert hit, f"手机包里少了 {need}"
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: mobile

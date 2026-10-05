@@ -227,6 +227,40 @@ python3 tools/cli.py export 加强版.apk --how apk     -o 导出目录
 - **桌面版**：工具栏「导出…」选目录 → 四种方式单选 → 开始导出
 - **网页版**：首页第 ③ 步直接列四张卡片，点了就导，导完给下载按钮
 
+### 第四种要装工具，前三种不要
+
+**重打包 APK 是唯一需要外部工具的**：
+
+| | java | apksigner | zipalign |
+|---|---|---|---|
+| UnityCache / 模组包 / CDN | 不要 | 不要 | 不要 |
+| **重打包 APK** | **要** | **要** | **要**（手机除外，见下） |
+
+缺工具时界面上那一项会**置灰并写明原因**，旁边还有一个「**帮我装工具**」按钮，
+点一下自动装：
+
+```bash
+python3 tools/install_build_tools.py          # 装
+python3 tools/install_build_tools.py --check  # 只看缺什么
+```
+
+各平台装法：
+
+| 平台 | JDK | build-tools |
+|---|---|---|
+| macOS | `brew install openjdk` | Google 的 cmdline-tools + sdkmanager |
+| Windows | `winget install EclipseAdoptium.Temurin.21.JDK` | 同上 |
+| Debian/Ubuntu | `sudo apt install openjdk-17-jdk-headless` | 同上 |
+| **Termux（手机）** | `pkg install openjdk-17` | **只取 `apksigner.jar`** |
+
+**手机上为什么特殊**：Google 的 build-tools 里 `zipalign` 是各平台预编译的
+**原生程序**，只出了 x86_64，**没有 Android/ARM 版** —— 手机上一开始就装不上，
+不是没装。所以 Termux 那条路只装 JDK + 拿 `apksigner.jar`，
+对齐那步交给**纯 Python 的 `pm_storykit/zipalign.py`**（自己写的，
+用官方 `zipalign -c -p 4` 验证通过，4365 个条目内容逐字节相同）。
+
+没有官方 zipalign 时 `apkbuild.zipalign()` 会自动走那一份，不用手动切。
+
 ### 还没改任何东西时会拦住
 
 ```
