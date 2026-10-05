@@ -1,0 +1,200 @@
+name: 发版（打各平台安装包）
+
+# 打 tag（v*）或手动触发。
+# PyInstaller **不能交叉编译** —— 所以 Windows 的包必须在 Windows 机器上打。
+
+env:
+  # Windows 控制台默认不是 UTF-8，脚本 print 中文会 UnicodeEncodeError
+  PYTHONIOENCODING: utf-8
+  PYTHONUTF8: "1"
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "版本号（例如 v1.0.0）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  desktop:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows x64
+            asset: pm-storykit-Windows-x64.zip
+          - os: macos-14
+            label: macOS arm64
+            asset: pm-storykit-macOS-arm64.zip
+          - os: ubuntu-22.04
+            label: Linux x64
+            asset: pm-storykit-Linux-x64.tar.gz
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 装 Linux 图形库
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgl1 libglu1-mesa libx11-6 libxrandr2 libxinerama1 libxcursor1 \
+            libxi6 libxext6 libfontconfig1 libegl1 fonts-noto-cjk xvfb
+
+      - name: 装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: 打包
+        run: python build/build_app.py --keep-build
+
+      - name: 冒烟测试（Linux，无头跑几帧）
+        if: runner.os == 'Linux'
+        run: |
+          xvfb-run -a python - <<'PY'
+          import os, subprocess, sys
+          os.environ["PM_STORYKIT_AUTOTEST"] = "8"
+          r = subprocess.run([sys.executable, "app/main.py"], timeout=180)
+          raise SystemExit(r.returncode)
+          PY
+
+      - name: 冒烟测试（打包后的网页版接口）
+        shell: bash
+        run: |
+          set -e
+          BIN="dist/口蘑剧情工坊/口蘑剧情工坊"
+          [ -f "$BIN.exe" ] && BIN="$BIN.exe"
+          "$BIN" --web --port 8799 &
+          SRV=$!
+          for i in $(seq 1 40); do
+            sleep 2
+            curl -sf -o /dev/null "http://127.0.0.1:8799/api/state" && break
+          done
+          curl -sf -o /dev/null "http://127.0.0.1:8799/"
+          curl -sf -o /dev/null "http://127.0.0.1:8799/manifest.webmanifest"
+          echo "打包后的产物能起服务 ✓"
+          kill $SRV 2>/dev/null || true
+
+      - name: 压成 zip（用 Python，Windows runner 没有 zip 命令）
+        if: runner.os != 'Linux'
+        shell: bash
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          python - <<'PY'
+          import os, zipfile, pathlib
+          dist = pathlib.Path("dist")
+          app = dist / "\u53e3\u8611\u5267\u60c5\u5de5\u574a.app"
+          folder = dist / "\u53e3\u8611\u5267\u60c5\u5de5\u574a"
+          target = app if app.is_dir() else folder
+          assert target.is_dir(), f"no build output: {target}"
+          out = dist / os.environ["ASSET"]
+          out.unlink(missing_ok=True)
+          n = 0
+          with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+              for f in sorted(target.rglob("*")):
+                  if not f.is_file():
+                      continue
+                  zi = zipfile.ZipInfo(str(f.relative_to(dist)).replace(os.sep, "/"),
+                                       date_time=(2026, 1, 1, 0, 0, 0))
+                  zi.compress_type = zipfile.ZIP_DEFLATED
+                  zi.flag_bits |= 0x800
+                  zi.external_attr = (0o755 if os.access(f, os.X_OK) else 0o644) << 16
+                  z.writestr(zi, f.read_bytes())
+                  n += 1
+          print(f"  {out.name}: {n} files, {out.stat().st_size/1048576:.1f} MB")
+          PY
+
+      - name: 压成 tar.gz（Linux 保留可执行位）
+        if: runner.os == 'Linux'
+        run: tar -C dist -czf "dist/${{ matrix.asset }}" 口蘑剧情工坊
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ runner.os }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  mobile:
+    name: 手机端（Android / iOS）
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 打手机端包
+        run: |
+          python tools/package_mobile.py -o dist
+          ls -la dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobile
+          path: dist/pm-storykit-*.zip
+          if-no-files-found: error
+
+  release:
+    name: 挂到 Release
+    needs: [desktop, mobile]
+    runs-on: ubuntu-22.04
+    steps:
+      # gh release create 要在 git 仓库里跑，这个 job 没 checkout 过
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: assets
+          merge-multiple: true
+      - name: 列一下都收到什么（顺便挡住空文件）
+        run: |
+          ls -la assets
+          for f in assets/*; do
+            sz=$(stat -c%s "$f")
+            if [ "$sz" -lt 100000 ]; then echo "::error::$f 是空的 ($sz 字节)"; exit 1; fi
+          done
+      - name: 建 Release 并上传
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          cat > notes.md <<'MD'
+          ## 各平台的安装包
+
+          | 下载 | 怎么装 |
+          |---|---|
+          | **pm-storykit-Windows-x64.zip** | 解压，双击 `口蘑剧情工坊.exe`。免安装，整个文件夹一起拷走 |
+          | **pm-storykit-macOS-arm64.zip** | 解压，`.app` 拖进「应用程序」 |
+          | **pm-storykit-Linux-x64.tar.gz** | 解压即用 |
+          | **pm-storykit-Android.zip** | 用 Termux，照包里的「安卓安装说明.md」走；装完可「添加到主屏幕」当 App |
+          | **pm-storykit-iOS.zip** | 电脑上双击「启动服务.command / .bat」，iPhone 用 Safari 连过去，再「添加到主屏幕」 |
+
+          **怎么用（三步）**：打开游戏文件 → 点一个分类（新手教程 / 剧情任务 /
+          对战训练师 / NPC 对白 / 我方皮肤 / 地图）→ 改完应用并导出。
+
+          **四种导出**：UnityCache 目录（推手机即生效，不用重装）、.pmmod 模组包、
+          CDN 目录、重打包 APK（要 JDK + build-tools，手机上会自动置灰）。
+
+          > 手机端走的是**网页版**：这个工具的核心是 Python + UnityPy，要 lz4 /
+          > brotli / texture2ddecoder 这些原生扩展，它们没有 Android / iOS 轮子。
+          > 所以 Android 把后端装在 Termux 里，iOS 把后端放在电脑上、手机当终端。
+          > **各平台功能一致**。
+
+          **首次打开 macOS 版被 Gatekeeper 拦**：
+          `xattr -dr com.apple.quarantine 口蘑剧情工坊.app`
+          MD
+          gh release create "$TAG" assets/* \
+            --title "口蘑剧情工坊 $TAG" --notes-file notes.md 2>/dev/null || \
+          gh release create "$TAG" assets/* \
+            --title "口蘑剧情工坊 $TAG" --notes-file notes.md --verify-tag

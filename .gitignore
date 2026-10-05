@@ -1,7 +1,11 @@
 __pycache__/
 *.py[cod]
 .venv/
-build/
+build/work/
+build/*.spec
+!build/build_app.py
+!build/entry.py
+!build/icon/
 dist/
 *.spec
 *.ini
