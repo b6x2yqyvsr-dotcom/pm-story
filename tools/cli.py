@@ -154,8 +154,27 @@ def cmd_team(a) -> int:
 
 
 def cmd_tutorial(a) -> int:
-    """列出新手教程的全部文本。"""
+    """列出新手教程：文本 + 双方阵容 + 野怪。"""
     s = _open(a.paths, a.lang)
+    L = ST.tutorial_lineups(s, a.lang)
+    if a.lineup:
+        print(f"\n  教程双方阵容 / 野怪")
+        print(f"\n  ▸ 对方阵容（直接可改：TrainerInfo.morties）")
+        for o in L["opponents"]:
+            team = "、".join(f"{m['id']} Lv{m['level']}" for m in o["team"]) or "（空）"
+            print(f"      {o['id']:<28} {o['name']:<12} {team}")
+        w = L["world"]
+        print(f"\n  ▸ 教程野怪   世界 {w['id']} {w['size']} 主题 {w['theme']}"
+              f" · 野怪配额 {'不限' if w['morty_quota'] < 0 else w['morty_quota']}")
+        print(f"      对白点名：「他跟我长得一模一样，就是比我脏了一点」→ 邋遢莫蒂")
+        print(f"      候选（preload 预载的 4 只，游戏脚本从里面挑）：")
+        for c in L["candidates"]:
+            mark = "●" if c["id"] == "MortyScruffy" else "○"
+            print(f"        {mark} {c['name']:<10} {c['id']:<18}"
+                  f" 编号 {c['number']:<5} 体力 {c['hp']:<4} 攻击 {c['atk']}")
+        print(f"\n      ⚠ 具体哪只写死在游戏脚本里，数据表里没有。")
+        print(f"        但改这几只的数值/形象/名字，教程里的野怪会跟着变。")
+        return 0
     print(f"\n  新手教程（{ST.LANG_LABEL.get(a.lang, a.lang)}）")
     for g in ST.tutorial_texts(s, a.lang):
         print(f"\n  ▸ {g['group']} · {g['label']}  （{len(g['items'])} 段）")
@@ -237,8 +256,9 @@ def main() -> int:
     p.add_argument("-o", "--out")
     p.set_defaults(fn=cmd_team)
 
-    p = sub.add_parser("tutorial", help="看新手教程的全部文本")
+    p = sub.add_parser("tutorial", help="看新手教程的全部文本 / 双方阵容 / 野怪")
     common(p)
+    p.add_argument("--lineup", action="store_true", help="只看双方阵容和野怪")
     p.set_defaults(fn=cmd_tutorial)
 
     p = sub.add_parser("diagnose", help="检测 APK 是不是完整版（不完整就列出哪些用不了）")

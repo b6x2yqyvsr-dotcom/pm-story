@@ -97,6 +97,75 @@ Pocket Mortys **单人剧情**编辑器 —— 改任务对白、对战训练师
 | 教程世界 | `WorldInfo` | `Tutorial`，15×15，主题 Summer |
 | 教程入口 | `InteractionInfo` | `TutorialWorld`，从议会厅 `StoryTransition` 过去 |
 
+### 双方阵容和野怪
+
+![教程阵容与野怪](docs/界面截图-教程-阵容与野怪.png)
+
+列表里选「**双方阵容 / 野怪**」：
+
+```
+▸ 对方阵容   这个直接能改（TrainerInfo.morties）
+  麦萨·卡拉克斯   TrainerTutorial
+    1. [小胡子莫蒂 · MortyMustache ▾] [4] − + ×   [+ 加一只]
+  神秘瑞克        TrainerTutorialGymLeader
+    1. [流浪猫莫蒂 · MortyStrayCat   ▾] [5] − + ×   [+ 加一只]
+
+▸ 教程野怪   教程世界 Tutorial 15×15 主题 Summer · 野怪配额 不限
+  对白点名：「他跟我长得一模一样，就是比我脏了一点」→ 邋遢莫蒂
+  候选（preload 预载的 4 只，游戏脚本从里面挑）：
+    ○ 宝宝莫蒂    MortyBaby      编号 385  体力 55  攻击 40
+    ○ 小胡子莫蒂  MortyMustache  编号 19   体力 48  攻击 51
+    ● 邋遢莫蒂    MortyScruffy   编号 2    体力 45  攻击 35
+    ○ 流浪猫莫蒂  MortyStrayCat  编号 51   体力 47  攻击 49
+```
+
+**对方阵容是完全可改的** —— 换莫蒂就是换它出场的形象，等级也能调，
+加减队员都行。实测改完导出，`TrainerInfo.morties` 确实变成了新值，
+没动的那条保持原样。
+
+命令行：
+
+```bash
+python3 tools/cli.py tutorial 加强版.apk --lineup        # 只看阵容和野怪
+python3 tools/cli.py team 加强版.apk --trainer TrainerTutorial \
+    --morties "MortyScruffy:10,MortyBaby:8" -o 导出目录
+```
+
+### 野怪：哪只是写死的，但能间接改
+
+查清楚了：**教程野怪具体是哪只，不在任何数据表里** —— 游戏脚本挑的。
+`WorldInfo:Tutorial` 只有 `{MORTY:-1}`（配额不限），没有指明物种。
+
+但能确定它从 **`preload` 包预载的那 4 只**里挑 —— 那 4 只就是为教程准备的：
+
+| | | |
+|---|---|---|
+| `MortyBaby` | 宝宝莫蒂 | 编号 385，体力 55，攻击 40 |
+| `MortyMustache` | 小胡子莫蒂 | 编号 19，体力 48，攻击 51 |
+| **`MortyScruffy`** | **邋遢莫蒂** | 编号 2，体力 45，攻击 35 |
+| `MortyStrayCat` | 流浪猫莫蒂 | 编号 51，体力 47，攻击 49 |
+
+**对白点名了**：阶段 3 说「那边有个莫蒂！*瑞克，他跟我长得一模一样，
+就是比我脏了一点」——「比我脏」对应 **邋遢莫蒂 `MortyScruffy`**。
+另有 `_BABY` 分支变体对应 `MortyBaby`。
+
+所以**改这 4 只的数值、形象、名字，教程里的野怪就跟着变** ——
+它们本来就是为教程预载的。改数值去「新增条目」或直接改 `MortyInfo`，
+换形象去「图鉴」或资源替换。
+
+### 我方阵容
+
+教程里你**抓到的那只野怪就是你第一只莫蒂**，所以**改野怪 = 改我方阵容**。
+
+另外 `QuestInfo` 的 `content` 是支持直接送莫蒂的：
+
+```json
+{"reward": "MORTY", "quantity": 1, "parameters": {"ids": ["MortyEgg"], "level": 5}}
+```
+
+（实测 `QuestMasyKallerax` 就是这么送 `MortyEgg` 的。）教程本身没有任务条目，
+要送莫蒂得挂在别的任务上。
+
 ### 主线教程对白的实际内容
 
 打开「阶段 3」能看到 6 段，其中还带分支变体：

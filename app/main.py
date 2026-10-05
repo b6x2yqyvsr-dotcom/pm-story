@@ -413,6 +413,17 @@ class StoryApp:
                 self.st_sel = next((r["id"] for r in rows if r.get("team_n")), rows[0]["id"])
             self.st_loaded = ""
             self._st_load()
+            if self.st_sel.startswith("lineup"):
+                # 阵容那一组没有文本字段，但要有双方队伍和野怪候选
+                L = getattr(self, "st_lineup", None) or {}
+                assert L.get("opponents"), "教程对方阵容读不到"
+                assert L.get("candidates"), "教程野怪候选读不到"
+                assert L["world"].get("id") == "Tutorial", "教程世界不对"
+                if self._frame <= 3:
+                    print(f"[自检] 教程阵容：对方 {len(L['opponents'])} 个训练师，"
+                          f"野怪候选 {len(L['candidates'])} 只，"
+                          f"世界 {L['world']['id']} {L['world']['size']}", flush=True)
+                return
             assert self.st_fields, f"「{tab}」读不到文本"
             if tab == "world":
                 # 边界：18 张地图全过一遍 —— 有 0×0 的、没主题的、limits 空的。
@@ -515,6 +526,10 @@ class StoryApp:
                 "zh": g["label"], "kind": "text", "group": g,
                 "n": len(g["items"]),
             })
+        rows.append({
+            "id": "lineup", "name": "双方阵容 / 野怪", "zh": "阵容",
+            "kind": "lineup", "n": 0,
+        })
         for e in extras:
             rows.append({
                 "id": "tbl:" + e["table"], "name": e["label"],
@@ -529,6 +544,14 @@ class StoryApp:
             return
         self.st_fields = {}
         self.st_team = []
+        if row["kind"] == "lineup":
+            from storykit import story as ST
+
+            self.st_lineup = ST.tutorial_lineups(self.sess, self.st_lang)
+            self.st_team = [dict(t) for t in
+                            (self.st_lineup["opponents"][0]["team"] if
+                             self.st_lineup["opponents"] else [])]
+            return
         if row["kind"] == "text":
             for it in row["group"]["items"]:
                 self.st_fields[it["id"]] = it["text"]
@@ -956,6 +979,10 @@ class StoryApp:
 
         imgui.separator()
 
+        if row["kind"] == "lineup":
+            self._draw_tutorial_lineup()
+            return
+
         # 非文本组：先把它是什么说清楚
         if row["kind"] == "table":
             e = row["extra"]
@@ -990,6 +1017,16 @@ class StoryApp:
         row = next((r for r in self._st_tut_rows() if r["id"] == self.st_sel), None)
         if row is None:
             return "✗ 先选一组"
+        if row["kind"] == "lineup":
+            from storykit import story as ST
+
+            L = getattr(self, "st_lineup", None) or {}
+            n = 0
+            for op in L.get("opponents") or []:
+                ST.set_trainer_team(self.sess, op["id"], op["team"])
+                n += 1
+            self._text_cache.clear()
+            return f"✓ 教程对方阵容：改了 {n} 个训练师"
         if row["kind"] != "text":
             return "✗ 这一组不是纯文本 —— 教程路牌/训练师请到对应的页签改"
         langs = ST.LANGS if self.st_all_langs else [self.st_lang]
@@ -1000,6 +1037,90 @@ class StoryApp:
         self._text_cache.clear()
         self._st_tut = None      # 让列表里的文本刷新
         return f"✓ {row['name']}：改了 {n} 段（{len(langs)} 种语言）"
+
+    def _draw_tutorial_lineup(self) -> None:
+        """新手教程的双方阵容 + 野怪。"""
+        from storykit import entries as E
+        from storykit import story as ST
+
+        L = getattr(self, "st_lineup", None)
+        if not L:
+            _text_colored(DIM, "读不到教程阵容。")
+            return
+
+        try:
+            morties = E.list_ids(self.sess, "morty")
+        except Exception:  # noqa: BLE001
+            morties = []
+        loc = {}
+        try:
+            b = self.sess.bundle("text", eager=True)
+            e = next((a for a in b.assets if a.name == "ZH_CN"), None)
+            if e is not None:
+                loc = json.loads(b.preview_text(e)).get("Morty") or {}
+        except Exception:  # noqa: BLE001
+            loc = {}
+
+        def mlabel(mid: str) -> str:
+            nm = (loc.get(mid) or {}).get("name") or mid
+            return f"{nm} · {mid}"
+
+        # ---- 对方阵容
+        _text_colored(YELLOW, "▸ 对方阵容")
+        imgui.same_line()
+        _text_colored(GREEN, "  这个直接能改（TrainerInfo.morties）")
+        for i, op in enumerate(L["opponents"]):
+            imgui.spacing()
+            imgui.text(op["name"])
+            imgui.same_line(150)
+            _mono(op["id"])
+            team = op["team"] or [{"id": morties[0] if morties else "", "level": 5}]
+            drop = None
+            for j, m in enumerate(team):
+                imgui.text(f"    {j + 1}.")
+                imgui.same_line(34)
+                imgui.set_next_item_width(300)
+                cur = morties.index(m["id"]) if m["id"] in morties else 0
+                ch, ci = imgui.combo(f"##tlm{i}_{j}", cur,
+                                     [mlabel(x) for x in morties] or ["（读不到）"])
+                if ch and morties:
+                    m["id"] = morties[ci]
+                imgui.same_line()
+                imgui.set_next_item_width(80)
+                cl, lv = imgui.input_int(f"##tll{i}_{j}", int(m.get("level") or 1))
+                if cl:
+                    m["level"] = max(1, lv)
+                imgui.same_line()
+                if imgui.small_button(f"×##tld{i}_{j}"):
+                    drop = j
+            if drop is not None:
+                team.pop(drop)
+            imgui.same_line()
+            if imgui.small_button(f"+ 加一只##tla{i}"):
+                team.append({"id": morties[0] if morties else "", "level": 5})
+            op["team"] = team
+
+        imgui.spacing()
+        imgui.separator()
+
+        # ---- 野怪
+        w = L["world"]
+        _text_colored(YELLOW, "▸ 教程野怪")
+        imgui.same_line()
+        _text_colored(DIM, f"  教程世界 {w['id']} {w['size']} 主题 {w['theme']}"
+                           f" · 野怪配额 {'不限' if w['morty_quota'] < 0 else w['morty_quota']}")
+        _text_colored(DIM, "  对白点名：「他跟我长得一模一样，就是比我脏了一点」→ 邋遢莫蒂")
+        imgui.text("   候选（preload 预载的 4 只，游戏脚本从里面挑）：")
+        for c in L["candidates"]:
+            mark = "●" if c["id"] == "MortyScruffy" else "○"
+            imgui.text(f"      {mark} {c['name']}")
+            imgui.same_line(170)
+            _mono(c["id"])
+            imgui.same_line(320)
+            _text_colored(DIM, f"编号 {c['number']}  体力 {c['hp']}  攻击 {c['atk']}")
+        _text_colored(WARN, "    ⚠ 具体哪只写死在游戏脚本里，数据表里没有。")
+        _text_colored(DIM, "      但改这几只的**数值 / 形象 / 名字**，教程里的野怪会跟着变 ——")
+        _text_colored(DIM, "      它们本来就是为教程预载的。去「新增条目」或「图鉴」里改就行。")
 
     def _draw_story_map(self) -> None:
         from storykit import worldmap as WM

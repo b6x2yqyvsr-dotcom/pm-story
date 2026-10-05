@@ -524,6 +524,89 @@ def set_textdef(sess: Session, key: str, value: str,
     return done
 
 
+# ---------------------------------------------------------------- 教程阵容
+
+
+def tutorial_lineups(sess: Session, lang: str = "ZH_CN") -> dict:
+    """新手教程的**双方阵容**和**野怪**。
+
+    查清楚的情况
+    ------------
+    * **对方阵容**：``TrainerInfo`` 里两个教程训练师的 ``morties`` 字段，
+      形如 ``"MortyMustache:4"`` —— **直接能改**（实测就是这两条）。
+    * **野怪**：教程世界 ``Tutorial`` 的 ``nodelimits`` 里有 ``{MORTY:...}``，
+      但**具体是哪只莫蒂不在任何数据表里** —— 游戏脚本挑的。
+      能确定的是它从 ``preload`` 包预载的那 4 只里挑（那 4 只就是为教程准备的）：
+      ``MortyBaby`` / ``MortyMustache`` / ``MortyScruffy`` / ``MortyStrayCat``。
+      对白也点了名 —— 阶段 3 说「他跟我长得一模一样，就是比我脏了一点」，
+      对应 ``MortyScruffy``（邋遢莫蒂）；另有 ``_BABY`` 分支对应 ``MortyBaby``。
+    * **我方阵容**：教程里你抓到的那只野怪就是你的第一只莫蒂。
+      所以改野怪 = 改我方阵容。想直接送莫蒂的话，
+      ``QuestInfo`` 的 ``content`` 支持 ``{"reward":"MORTY","parameters":{"ids":[...]}}``。
+    """
+    tx = read_texts(sess, lang)
+    tr = read_table(sess, "TrainerInfo")
+    mt = read_table(sess, "MortyInfo")
+    loc_m = (tx.get("Morty") or {})
+
+    opponents: list[dict] = []
+    for tid, row in sorted(tr.items()):
+        if not tid.startswith("TrainerTutorial"):
+            continue
+        row = row if isinstance(row, dict) else {}
+        t = (tx.get("Trainer") or {}).get(tid) or {}
+        opponents.append({
+            "id": tid,
+            "name": t.get("name") or tid,
+            "asset": row.get("assetid") or "",
+            "team": parse_team(row.get("morties") or ""),
+            "rewards": row.get("content") or [],
+        })
+
+    # 野怪候选：preload 里预载的那 4 只
+    candidates: list[dict] = []
+    for mid in ("MortyBaby", "MortyMustache", "MortyScruffy", "MortyStrayCat"):
+        r = mt.get(mid)
+        if not isinstance(r, dict):
+            continue
+        r = dict(r)
+        r["id"] = mid
+        # text/Morty 的条目是 {"name":...,"description":...}，别直接当字符串用
+        candidates.append({
+            "id": mid,
+            "name": (loc_m.get(mid) or {}).get("name") or mid,
+            "asset": r.get("assetid") or "",
+            "number": r.get("number"), "division": r.get("division"),
+            "hp": r.get("hpbase"), "atk": r.get("attackbase"),
+            "row": r,
+        })
+
+    w = read_table(sess, "WorldInfo").get("Tutorial") or {}
+    w = w if isinstance(w, dict) else {}
+    limits = {}
+    import re as _re
+
+    for m in _re.finditer(r"\{([A-Z_]+):(-?\d+)\}", w.get("nodelimits") or ""):
+        limits[m.group(1)] = int(m.group(2))
+
+    return {
+        "opponents": opponents,
+        "candidates": candidates,
+        "world": {
+            "id": "Tutorial",
+            "size": f"{w.get('segmentwidth')}×{w.get('segmentdepth')}",
+            "theme": w.get("materialid") or "",
+            "limits": limits,
+            "morty_quota": limits.get("MORTY", 0),
+        },
+    }
+
+
+def set_trainer_team(sess: Session, trainer_id: str, team: list[dict]) -> str:
+    """改一个训练师的出场阵容。"""
+    return set_table_row(sess, "TrainerInfo", trainer_id, {"morties": format_team(team)})
+
+
 def validate(sess: Session, lang: str = "ZH_CN") -> list[str]:
     """体检：剧情表和文本对不对得上。"""
     issues: list[str] = []
