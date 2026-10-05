@@ -296,6 +296,15 @@ class StoryApp:
             self.diag = DG.inspect(self.sess)
             self.show_diag = True
         _tip("看看这个 APK 是不是完整版；\n不是的话，哪些改动装不进 APK")
+        imgui.same_line()
+        if imgui.button("导出…"):
+            d = pfd.select_folder("导出到哪个目录")
+            if d.result():
+                self.export_dir = d.result()
+                self.export_kinds = None
+                self.export_msg = ""
+                self.show_export = True
+        _tip("四种方式：\nUnityCache（推手机即生效）/ 模组包 / CDN / 重打包 APK")
         imgui.end_disabled()
         imgui.same_line()
         if self.sess.source is not None:
@@ -487,6 +496,17 @@ class StoryApp:
                           f"野怪候选 {len(L['candidates'])} 只，"
                           f"世界 {L['world']['id']} {L['world']['size']}", flush=True)
                 return
+            # 下拉标签里不能出现 JSON —— text/Morty 的条目是字典，
+            # 忘了取 ["name"] 就会把整段 JSON 显示出来（踩过两次）
+            from pm_storykit import story as _ST
+
+            _loc = (_ST.read_texts(self.sess, "ZH_CN").get("Morty") or {})
+            for _mid in list(_loc)[:80]:
+                _lb = self.morty_label(_loc, _mid)
+                assert not _lb.lstrip().startswith("{"), \
+                    f"莫蒂下拉标签成了 JSON：{_lb[:50]}"
+                assert "description" not in _lb, \
+                    f"莫蒂下拉标签里混进了字段名：{_lb[:50]}"
             assert self.st_fields, f"「{tab}」读不到文本"
             if tab == "world":
                 # 边界：18 张地图全过一遍 —— 有 0×0 的、没主题的、limits 空的。
@@ -563,6 +583,22 @@ class StoryApp:
         if self.st_ov is None:
             self.st_ov = ST.overview(self.sess, self.st_lang)
         return self.st_ov
+
+    @staticmethod
+    def morty_label(loc: dict, mid: str) -> str:
+        """莫蒂下拉里显示的一行。
+
+        ``text/Morty`` 的条目是 ``{"name":..., "description":...}`` **字典**，
+        直接 ``f"{loc.get(mid)}"`` 会把整段 JSON 打进下拉框里（踩过两次：
+        一次在 story.py 的野怪候选，一次在这里的出场队伍）。
+        """
+        row = loc.get(mid)
+        nm = row.get("name") if isinstance(row, dict) else row
+        nm = (nm or "").strip()
+        # 兜底：万一还是拿到个字典，别把 JSON 显示出来
+        if nm.startswith("{") and nm.endswith("}"):
+            nm = ""
+        return f"{nm} · {mid}" if nm else mid
 
     def _st_rows(self) -> list[dict]:
         ov = self._st_overview()
@@ -1125,7 +1161,7 @@ class StoryApp:
             loc = {}
 
         def mlabel(mid: str) -> str:
-            nm = (loc.get(mid) or {}).get("name") or mid
+            nm = self.morty_label(loc, mid).rsplit(" · ", 1)[0]
             return f"{nm} · {mid}"
 
         # ---- 对方阵容
