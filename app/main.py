@@ -314,6 +314,13 @@ class StoryApp:
             self.st_loaded = ""
             self._st_load()
             assert self.st_fields, f"「{tab}」读不到文本"
+            if tab == "world":
+                assert getattr(self, "st_map", None), "地图状态没建起来"
+                assert self.st_map.get("limits"), "nodelimits 没解析出来"
+                print(f"[自检] 地图：{self.st_map['id']} "
+                      f"{self.st_map['w']}×{self.st_map['h']} "
+                      f"主题={self.st_map['theme']} "
+                      f"配额={len(self.st_map['limits'])} 种", flush=True)
             if i == len(self._TABS) - 1:
                 print(f"[自检] 剧情：{self._st_overview().counts()}", flush=True)
         if self._frame >= self.autotest:
@@ -342,6 +349,9 @@ class StoryApp:
         self.st_team = []
         self.st_msg = ""
         self.st_ov = None
+        self.st_map = None
+        self.st_map_show_sim = True
+        self._st_themes = []
         self.st_new_id = ""
         self.st_all_langs = False
         self._st_img = None
@@ -389,6 +399,14 @@ class StoryApp:
             self.st_team = ST.parse_team(data.get("morties") or "")
         if self.st_tab == "avatar":
             self._st_img = self._st_avatar_img(data.get("assetid") or "")
+        if self.st_tab == "world":
+            self._st_map_load(data)
+            if not getattr(self, "_st_themes", None):
+                from storykit import worldmap as WM
+
+                self._st_themes = WM.all_themes(
+                    [WM.from_row(r) for r in
+                     (self._st_overview().worlds or [])])
 
     def _st_avatar_img(self, avatar_asset: str):
         """我方皮肤的形象图（包里的 CharacterXxx 贴图）。"""
@@ -446,10 +464,12 @@ class StoryApp:
                     {k: self.st_table.get(k, "") for k in
                      ("assetid", "category", "cost", "currency", "displayorder")}))
             elif self.st_tab == "world":
+                from storykit import worldmap as WM
+
+                patch = WM.to_row_patch(self.st_map or {})
+                patch["camerabounds"] = self.st_table.get("camerabounds", "")
                 lines.append("✓ " + ST.set_table_row(
-                    self.sess, "WorldInfo", self.st_sel,
-                    {k: self.st_table.get(k, "") for k in
-                     ("materialid", "segmentwidth", "segmentdepth", "nodesetids")}))
+                    self.sess, "WorldInfo", self.st_sel, patch))
         except Exception as exc:  # noqa: BLE001
             lines.append(f"⚠ 表格写入失败：{exc}")
         self._text_cache.clear()
@@ -654,7 +674,14 @@ class StoryApp:
         imgui.spacing()
         if self.st_tab == "trainer":
             self._draw_story_team()
-        elif self.st_tab in ("avatar", "world", "quest"):
+        elif self.st_tab == "world":
+            self._draw_story_map()
+            imgui.spacing()
+            _text_colored(DIM, "▸ 其它字段")
+            self._draw_story_table_fields(skip=("materialid", "segmentwidth",
+                                                "segmentdepth", "nodesetids",
+                                                "nodelimits"))
+        elif self.st_tab in ("avatar", "quest"):
             self._draw_story_table_fields()
 
     def _draw_story_team(self) -> None:
@@ -707,7 +734,169 @@ class StoryApp:
         imgui.same_line()
         _text_colored(DIM, "队伍写法：" + (ST.format_team(self.st_team) or "（空）")[:60])
 
-    def _draw_story_table_fields(self) -> None:
+    # ------------------------------------------------------------ 地图编辑（图形化）
+    #
+    # 游戏的地图是**按参数运行时生成**的，数据里没有逐格数组，所以这里不是
+    # 「画笔刷格子」，而是把参数画出来：网格画布 + 尺寸滑条 + 节点配额 + 主题调色板，
+    # 再按参数模拟一份布局给你看密度。
+
+    def _st_map_load(self, data: dict) -> None:
+        from storykit import worldmap as WM
+
+        self.st_map = WM.from_row(data) if data else None
+        self.st_map_show_sim = True
+
+    def _draw_story_map(self) -> None:
+        from storykit import worldmap as WM
+
+        st = getattr(self, "st_map", None)
+        if not st:
+            _text_colored(DIM, "这条地图没有可用参数。")
+            return
+
+        _text_colored(YELLOW, "▸ 地图编辑")
+        imgui.same_line()
+        _mono("  MAP")
+        _text_colored(DIM, "   游戏按下面这些参数**实时生成**地图（数据里没有逐格数组），"
+                           "所以这里是参数可视化 + 布局模拟")
+
+        avail_w = imgui.get_content_region_avail().x
+        canvas_w = max(260.0, avail_w - 340)
+        cw, chh, placed_n = self._draw_map_canvas(st, canvas_w)
+
+        imgui.same_line(0, 14)
+        imgui.begin_group()
+        imgui.push_item_width(130)
+        ch, w = imgui.slider_int("宽##mapw", int(st["w"]), 5, 80)
+        if ch:
+            st["w"] = w
+        ch, h = imgui.slider_int("深##maph", int(st["h"]), 5, 80)
+        if ch:
+            st["h"] = h
+        ch, sp = imgui.slider_float("物品/箱子##mapsplit", float(st.get("split") or 0.5),
+                                    0.0, 1.0, "%.2f")
+        if ch:
+            st["split"] = f"{sp:.2f}"
+
+        imgui.spacing()
+        _text_colored(YELLOW, "主题")
+        imgui.same_line()
+        themes = getattr(self, "_st_themes", []) or [st.get("theme") or ""]
+        cur = themes.index(st["theme"]) if st.get("theme") in themes else 0
+        imgui.set_next_item_width(-30)
+        ch, ci = imgui.combo("##maptheme", cur, themes or ["（无）"])
+        if ch and themes:
+            st["theme"] = themes[ci]
+        c = WM.theme_color(st.get("theme") or "")
+        pp = imgui.get_cursor_screen_pos()
+        imgui.get_window_draw_list().add_rect_filled(
+            imgui.ImVec2(pp.x, pp.y + 3), imgui.ImVec2(pp.x + 18, pp.y + 21),
+            imgui.get_color_u32(imgui.ImVec4(*c, 1.0)), 3.0)
+        imgui.dummy(imgui.ImVec2(20, 22))
+
+        imgui.spacing()
+        _text_colored(YELLOW, "▸ 节点配额")
+        imgui.same_line()
+        _mono("nodelimits")
+        _text_colored(DIM, "  −1 = 不限")
+        limits = st.setdefault("limits", {})
+        imgui.begin_child("##maplims", imgui.ImVec2(300, 190), True)
+        for kind in WM.NODE_LABEL:
+            if kind not in limits:
+                continue
+            v = int(limits[kind])
+            imgui.text(WM.node_label(kind))
+            imgui.same_line(108)
+            pp = imgui.get_cursor_screen_pos()
+            imgui.get_window_draw_list().add_rect_filled(
+                imgui.ImVec2(pp.x, pp.y + 4), imgui.ImVec2(pp.x + 11, pp.y + 15),
+                imgui.get_color_u32(imgui.ImVec4(*WM.node_color(kind), 1.0)), 2.0)
+            imgui.dummy(imgui.ImVec2(15, 20))
+            imgui.same_line()
+            imgui.set_next_item_width(90)
+            ch, nv = imgui.input_int(f"##maplim{kind}", v)
+            if ch:
+                limits[kind] = nv
+            imgui.same_line()
+            _text_colored(DIM if v < 0 else GREEN, WM.limit_display(v))
+        imgui.end_child()
+        _text_colored(DIM, f"  合计会铺 {WM.total_nodes(limits)} 个")
+        if imgui.small_button("全不限"):
+            for k in limits:
+                limits[k] = -1
+        imgui.same_line()
+        if imgui.small_button("全 0"):
+            for k in limits:
+                limits[k] = 0
+        imgui.same_line()
+        _, self.st_map_show_sim = imgui.checkbox("模拟布局", self.st_map_show_sim)
+        imgui.end_group()
+
+        # 图例放画布下面（这时才换行）
+        _text_colored(DIM, f"  {st['w']} × {st['h']} 格 · 主题 {st.get('theme') or '—'}"
+                           + (f" · 模拟 {placed_n} 个节点" if placed_n else ""))
+        used = [k for k in WM.NODE_LABEL if int((st.get("limits") or {}).get(k, 0)) > 0]
+        for i, k in enumerate(used):
+            if i % 4:
+                imgui.same_line(0, 10)
+            pp = imgui.get_cursor_screen_pos()
+            imgui.get_window_draw_list().add_rect_filled(
+                imgui.ImVec2(pp.x, pp.y + 4), imgui.ImVec2(pp.x + 10, pp.y + 14),
+                imgui.get_color_u32(imgui.ImVec4(*WM.node_color(k), 1.0)), 2.0)
+            imgui.dummy(imgui.ImVec2(13, 0))
+            imgui.same_line()
+            _text_colored(DIM, WM.node_label(k))
+
+    def _draw_map_canvas(self, st: dict, width: float) -> None:
+        """把地图画出来：主题底色 + 网格 + 模拟节点。"""
+        from storykit import worldmap as WM
+
+        w, h = int(st["w"]), int(st["h"])
+        if w <= 0 or h <= 0:
+            _text_colored(DIM, "尺寸无效")
+            return
+        cell = max(6.0, min(20.0, min((width - 8) / max(1, w), 330.0 / max(1, h))))
+        cw, chh = cell * w, cell * h
+        p0 = imgui.get_cursor_screen_pos()
+        dl = imgui.get_window_draw_list()
+        theme = WM.theme_color(st.get("theme") or "")
+
+        # 底色
+        dl.add_rect_filled(imgui.ImVec2(p0.x, p0.y),
+                           imgui.ImVec2(p0.x + cw, p0.y + chh),
+                           imgui.get_color_u32(imgui.ImVec4(*theme, 1.0)), 2.0)
+        # 网格
+        grid = imgui.get_color_u32(imgui.ImVec4(0, 0, 0, 0.22))
+        if cell >= 8:
+            for x in range(w + 1):
+                dl.add_line(imgui.ImVec2(p0.x + x * cell, p0.y),
+                            imgui.ImVec2(p0.x + x * cell, p0.y + chh), grid, 1.0)
+            for y in range(h + 1):
+                dl.add_line(imgui.ImVec2(p0.x, p0.y + y * cell),
+                            imgui.ImVec2(p0.x + cw, p0.y + y * cell), grid, 1.0)
+        # 模拟节点
+        placed = []
+        if getattr(self, "st_map_show_sim", True):
+            placed = WM.simulate(st.get("id", ""), w, h, st.get("limits") or {})
+            for nd in placed:
+                x, y = nd["x"], nd["y"]
+                col = WM.node_color(nd["kind"])
+                a = imgui.ImVec2(p0.x + x * cell + 1, p0.y + y * cell + 1)
+                b = imgui.ImVec2(p0.x + (x + 1) * cell - 1, p0.y + (y + 1) * cell - 1)
+                dl.add_rect_filled(a, b, imgui.get_color_u32(imgui.ImVec4(*col, 1.0)), 2.0)
+                if cell >= 16:
+                    # add_rect(p_min, p_max, col, rounding, thickness, flags)
+                    dl.add_rect(a, b, imgui.get_color_u32(imgui.ImVec4(0, 0, 0, 0.6)),
+                                2.0, 1.0)
+        # 边框
+        dl.add_rect(imgui.ImVec2(p0.x, p0.y), imgui.ImVec2(p0.x + cw, p0.y + chh),
+                    imgui.get_color_u32(imgui.ImVec4(0.5, 0.5, 0.55, 0.8)), 2.0, 1.5)
+        imgui.dummy(imgui.ImVec2(cw, chh))
+        # 注意：这里**只能有 dummy**，后面不能再画文字 ——
+        # 一旦换行，调用方的 same_line() 就接不到画布右边了（踩过）
+        return cw, chh, len(placed)
+
+    def _draw_story_table_fields(self, skip: tuple = ()) -> None:
         from storykit import story as ST
 
         table = {"quest": "QuestInfo", "avatar": "PlayerAvatarInfo",
@@ -715,7 +904,7 @@ class StoryApp:
         _text_colored(YELLOW, "▸ 数据（spdata/" + table + "）")
         data = self._st_row(table)
         for k in sorted(data):
-            if k in ("id", "content", "morties", "items"):
+            if k in ("id", "content", "morties", "items") or k in skip:
                 continue
             v = str(data.get(k, "") or "")
             imgui.text(ST.field_label(table, k))
