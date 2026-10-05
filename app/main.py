@@ -309,12 +309,39 @@ class StoryApp:
             self.st_tab = tab
             rows = self._st_rows()
             assert rows, f"「{tab}」读不到条目"
-            if self.st_sel not in [r["id"] for r in rows]:
+            want = os.environ.get("PM_STORY_SEL")
+            if want and any(r["id"] == want for r in rows):
+                self.st_sel = want
+            elif self.st_sel not in [r["id"] for r in rows]:
                 self.st_sel = next((r["id"] for r in rows if r.get("team_n")), rows[0]["id"])
             self.st_loaded = ""
             self._st_load()
             assert self.st_fields, f"「{tab}」读不到文本"
             if tab == "world":
+                # 边界：18 张地图全过一遍 —— 有 0×0 的、没主题的、limits 空的。
+                # 只挑第一张（15×15）是发现不了这些的，TournamentLobby 就是 0×0。
+                from storykit import story as ST
+                from storykit import worldmap as WM
+
+                saved = self.st_map
+                bad = []
+                for wr in ST.read_table(self.sess, "WorldInfo").items():
+                    wid, row = wr
+                    m = WM.from_row(dict(row, id=wid) if "id" not in row else row)
+                    m["id"] = wid
+                    self.st_map = m
+                    try:
+                        r = self._draw_map_canvas(m, 300.0)   # 直接调，验证不崩
+                        assert isinstance(r, tuple) and len(r) == 3, \
+                            f"{wid} 画布返回值不对: {r!r}"
+                    except Exception as exc:  # noqa: BLE001
+                        bad.append(f"{wid}: {type(exc).__name__}: {exc}")
+                    # 写回的格式也要能过
+                    WM.format_limits(m.get("limits") or {})
+                    WM.to_row_patch(m)
+                self.st_map = saved          # 扫描是**只读**的，别污染编辑器状态
+                assert not bad, f"地图画布在这些世界上崩了: {bad[:3]}"
+                print(f"[自检] 地图画布：18 张全过（含 0×0 的 TournamentLobby）", flush=True)
                 assert getattr(self, "st_map", None), "地图状态没建起来"
                 assert self.st_map.get("limits"), "nodelimits 没解析出来"
                 print(f"[自检] 地图：{self.st_map['id']} "
@@ -753,6 +780,12 @@ class StoryApp:
         if not st:
             _text_colored(DIM, "这条地图没有可用参数。")
             return
+        # 主题调色板懒加载（有些世界没有主题）
+        if not getattr(self, "_st_themes", None):
+            from storykit import worldmap as WM
+
+            self._st_themes = WM.all_themes(
+                [WM.from_row(r) for r in (self._st_overview().worlds or [])]) or [""]
 
         _text_colored(YELLOW, "▸ 地图编辑")
         imgui.same_line()
@@ -853,8 +886,12 @@ class StoryApp:
 
         w, h = int(st["w"]), int(st["h"])
         if w <= 0 or h <= 0:
-            _text_colored(DIM, "尺寸无效")
-            return
+            # 有几张地图就是 0×0（TournamentLobby），别当异常 ——
+            # 但**必须照样返回三元组**，外面是解包调用的（踩过）
+            _text_colored(DIM, f"这张地图没有尺寸（{w}×{h}）—— 它不在世界里生成，"
+                               f"是直接挂场景的，改改主题就行")
+            imgui.dummy(imgui.ImVec2(max(200.0, width), 60))
+            return max(200.0, width), 60.0, 0
         cell = max(6.0, min(20.0, min((width - 8) / max(1, w), 330.0 / max(1, h))))
         cw, chh = cell * w, cell * h
         p0 = imgui.get_cursor_screen_pos()
