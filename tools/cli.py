@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""口蘑剧情编辑器 · 命令行
+"""口蘑剧情工坊 · 命令行
 
     python3 tools/cli.py list   <来源>                 列出剧情清单
     python3 tools/cli.py show   <来源> --quest QuestX  看一个任务的全文
@@ -29,8 +29,8 @@ from pathlib import Path  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from storykit import session as session_mod  # noqa: E402
-from storykit import story as ST  # noqa: E402
+from pm_storykit import session as session_mod  # noqa: E402
+from pm_storykit import story as ST  # noqa: E402
 
 SEC = {"quest": "Quest", "trainer": "Trainer", "npc": "NPC",
        "avatar": "PlayerAvatar", "world": "Dimensions", "tutorial": "TextDefs"}
@@ -197,7 +197,7 @@ def cmd_tutorial(a) -> int:
 
 def cmd_diagnose(a) -> int:
     """检测来源够不够用。"""
-    from storykit import diagnose as DG
+    from pm_storykit import diagnose as DG
 
     s = _open(a.paths, a.lang)
     rep = DG.inspect(s)
@@ -214,7 +214,7 @@ def cmd_export(a) -> int:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="口蘑剧情编辑器")
+    ap = argparse.ArgumentParser(description="口蘑剧情工坊")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p):

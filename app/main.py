@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""口蘑剧情编辑器 · 图形界面（独立版）
+"""口蘑剧情工坊 · 图形界面（独立版）
 
 只做一件事：改 Pocket Mortys 的单人剧情。
 —— 任务对白、对战训练师（含出场队伍）、我方皮肤、地图。
@@ -34,11 +34,11 @@ from imgui_bundle import hello_imgui, immapp, imgui, immvision, portable_file_di
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from storykit import session as session_mod  # noqa: E402
-from storykit import story as story_mod  # noqa: E402
-from storykit import sysenv  # noqa: E402
+from pm_storykit import session as session_mod  # noqa: E402
+from pm_storykit import story as story_mod  # noqa: E402
+from pm_storykit import sysenv  # noqa: E402
 
-APP_NAME = "口蘑剧情编辑器"
+APP_NAME = "口蘑剧情工坊"
 
 # ---------------------------------------------------------------- 视觉
 
@@ -158,7 +158,7 @@ class StoryApp:
         self.diag = None
         self.show_diag = False
         self._st_reset()
-        self.autotest = int(os.environ.get("PM_STORY_AUTOTEST", "0") or "0")
+        self.autotest = int(os.environ.get("PM_STORYKIT_AUTOTEST", "0") or "0")
         self._frame = 0
         for p in (paths or []):
             if Path(p).exists():
@@ -209,7 +209,7 @@ class StoryApp:
             self.log(f"✓ 打开 {len(paths)} 个来源，"
                      f"{len(self.sess.source.bundle_names())} 个资源包")
             # 自动检测：不是完整版就直接说清楚哪些用不了
-            from storykit import diagnose as DG
+            from pm_storykit import diagnose as DG
 
             self.diag = DG.inspect(self.sess)
             for line in DG.format_report(self.diag, brief=False).split("\n"):
@@ -283,7 +283,7 @@ class StoryApp:
         _tip("单人剧情编辑器：任务对白、对战训练师、我方皮肤、地图")
         imgui.same_line()
         if imgui.button("检测"):
-            from storykit import diagnose as DG
+            from pm_storykit import diagnose as DG
 
             self.diag = DG.inspect(self.sess)
             self.show_diag = True
@@ -303,7 +303,7 @@ class StoryApp:
 
     def _draw_diag(self) -> None:
         """来源检测报告。"""
-        from storykit import diagnose as DG
+        from pm_storykit import diagnose as DG
 
         _center_next_window(imgui.ImVec2(700, 620))
         opened, self.show_diag = imgui.begin("来源检测", self.show_diag)
@@ -372,19 +372,19 @@ class StoryApp:
         （免疫：我方皮肤那个页签会调 immvision.image，色彩顺序没设的话
         正好是在这一步 panic，光换状态是发现不了的。）
         """
-        pin = os.environ.get("PM_STORY_TAB")
+        pin = os.environ.get("PM_STORYKIT_TAB")
         if self._frame == 1 and self.sess.source is not None:
             self.show_story = True
             self._st_reset()
-            if os.environ.get("PM_STORY_SHOW_DIAG") == "1":
-                from storykit import diagnose as DG
+            if os.environ.get("PM_STORYKIT_SHOW_DIAG") == "1":
+                from pm_storykit import diagnose as DG
 
                 self.diag = DG.inspect(self.sess)
                 self.show_diag = True
             if pin:
                 self.st_tab = pin
         elif self._frame >= 2 and self.sess.source is not None:
-            from storykit import diagnose as DG
+            from pm_storykit import diagnose as DG
 
             rep = DG.inspect(self.sess)
             if any("spdata" in f.missing for f in rep.blocked):
@@ -406,7 +406,7 @@ class StoryApp:
             self.st_tab = tab
             rows = self._st_rows()
             assert rows, f"「{tab}」读不到条目"
-            want = os.environ.get("PM_STORY_SEL")
+            want = os.environ.get("PM_STORYKIT_SEL")
             if want and any(r["id"] == want for r in rows):
                 self.st_sel = want
             elif self.st_sel not in [r["id"] for r in rows]:
@@ -428,8 +428,8 @@ class StoryApp:
             if tab == "world":
                 # 边界：18 张地图全过一遍 —— 有 0×0 的、没主题的、limits 空的。
                 # 只挑第一张（15×15）是发现不了这些的，TournamentLobby 就是 0×0。
-                from storykit import story as ST
-                from storykit import worldmap as WM
+                from pm_storykit import story as ST
+                from pm_storykit import worldmap as WM
 
                 saved = self.st_map
                 bad = []
@@ -495,7 +495,7 @@ class StoryApp:
         self._st_img = None
 
     def _st_overview(self):
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         if self.st_ov is None:
             self.st_ov = ST.overview(self.sess, self.st_lang)
@@ -512,7 +512,7 @@ class StoryApp:
 
     def _st_tut_rows(self) -> list[dict]:
         """新手教程的「列表」：文本分组 + 非文本部分。"""
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         if getattr(self, "_st_tut", None) is None:
             self._st_tut = (ST.tutorial_texts(self.sess, self.st_lang),
@@ -545,7 +545,7 @@ class StoryApp:
         self.st_fields = {}
         self.st_team = []
         if row["kind"] == "lineup":
-            from storykit import story as ST
+            from pm_storykit import story as ST
 
             self.st_lineup = ST.tutorial_lineups(self.sess, self.st_lang)
             self.st_team = [dict(t) for t in
@@ -564,7 +564,7 @@ class StoryApp:
 
     def _st_load(self) -> None:
         """把选中的那条读进编辑缓冲。"""
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         if self.st_loaded == f"{self.st_tab}:{self.st_sel}":
             return
@@ -598,7 +598,7 @@ class StoryApp:
         if self.st_tab == "world":
             self._st_map_load(data)
             if not getattr(self, "_st_themes", None):
-                from storykit import worldmap as WM
+                from pm_storykit import worldmap as WM
 
                 self._st_themes = WM.all_themes(
                     [WM.from_row(r) for r in
@@ -606,7 +606,7 @@ class StoryApp:
 
     def _st_avatar_img(self, avatar_asset: str):
         """我方皮肤的形象图（包里的 CharacterXxx 贴图）。"""
-        from storykit import entries as E
+        from pm_storykit import entries as E
 
         try:
             b = self.sess.bundle("appdata", eager=True)
@@ -634,7 +634,7 @@ class StoryApp:
             return None
 
     def _st_apply(self) -> str:
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         if not self.st_sel:
             return "✗ 先选一条"
@@ -662,7 +662,7 @@ class StoryApp:
                     {k: self.st_table.get(k, "") for k in
                      ("assetid", "category", "cost", "currency", "displayorder")}))
             elif self.st_tab == "world":
-                from storykit import worldmap as WM
+                from pm_storykit import worldmap as WM
 
                 patch = WM.to_row_patch(self.st_map or {})
                 patch["camerabounds"] = self.st_table.get("camerabounds", "")
@@ -674,7 +674,7 @@ class StoryApp:
         return "\n".join(lines)
 
     def _st_new(self) -> str:
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         nid = (self.st_new_id or "").strip()
         if not nid or not self.st_sel:
@@ -706,7 +706,7 @@ class StoryApp:
             _text_colored(WARN, "先打开数据源。")
             imgui.end()
             return
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         try:
             ov = self._st_overview()
@@ -831,7 +831,7 @@ class StoryApp:
         return getattr(self, "st_table", {}) or {}
 
     def _draw_story_editor(self) -> None:
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         if self.st_tab == "tutorial":
             self._draw_tutorial_editor()
@@ -895,8 +895,8 @@ class StoryApp:
 
     def _draw_story_team(self) -> None:
         """对手队伍编辑器 —— 「对方皮肤」就是挑不同的莫蒂上场。"""
-        from storykit import entries as E
-        from storykit import story as ST
+        from pm_storykit import entries as E
+        from pm_storykit import story as ST
 
         _text_colored(YELLOW, "▸ 出场队伍")
         imgui.same_line()
@@ -950,7 +950,7 @@ class StoryApp:
     # 再按参数模拟一份布局给你看密度。
 
     def _st_map_load(self, data: dict) -> None:
-        from storykit import worldmap as WM
+        from pm_storykit import worldmap as WM
 
         self.st_map = WM.from_row(data) if data else None
         self.st_map_show_sim = True
@@ -962,7 +962,7 @@ class StoryApp:
         ``WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_1`` —— 一个阶段好几段。
         所以这里不是「一条记录几个字段」，而是**一段一段往下排**。
         """
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         row = next((r for r in self._st_tut_rows() if r["id"] == self.st_sel), None)
         if row is None:
@@ -1012,13 +1012,13 @@ class StoryApp:
 
     def _st_tut_apply(self) -> str:
         """写回教程文本（TextDefs）。"""
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         row = next((r for r in self._st_tut_rows() if r["id"] == self.st_sel), None)
         if row is None:
             return "✗ 先选一组"
         if row["kind"] == "lineup":
-            from storykit import story as ST
+            from pm_storykit import story as ST
 
             L = getattr(self, "st_lineup", None) or {}
             n = 0
@@ -1040,8 +1040,8 @@ class StoryApp:
 
     def _draw_tutorial_lineup(self) -> None:
         """新手教程的双方阵容 + 野怪。"""
-        from storykit import entries as E
-        from storykit import story as ST
+        from pm_storykit import entries as E
+        from pm_storykit import story as ST
 
         L = getattr(self, "st_lineup", None)
         if not L:
@@ -1123,7 +1123,7 @@ class StoryApp:
         _text_colored(DIM, "      它们本来就是为教程预载的。去「新增条目」或「图鉴」里改就行。")
 
     def _draw_story_map(self) -> None:
-        from storykit import worldmap as WM
+        from pm_storykit import worldmap as WM
 
         st = getattr(self, "st_map", None)
         if not st:
@@ -1131,7 +1131,7 @@ class StoryApp:
             return
         # 主题调色板懒加载（有些世界没有主题）
         if not getattr(self, "_st_themes", None):
-            from storykit import worldmap as WM
+            from pm_storykit import worldmap as WM
 
             self._st_themes = WM.all_themes(
                 [WM.from_row(r) for r in (self._st_overview().worlds or [])]) or [""]
@@ -1231,7 +1231,7 @@ class StoryApp:
 
     def _draw_map_canvas(self, st: dict, width: float) -> None:
         """把地图画出来：主题底色 + 网格 + 模拟节点。"""
-        from storykit import worldmap as WM
+        from pm_storykit import worldmap as WM
 
         w, h = int(st["w"]), int(st["h"])
         if w <= 0 or h <= 0:
@@ -1283,7 +1283,7 @@ class StoryApp:
         return cw, chh, len(placed)
 
     def _draw_story_table_fields(self, skip: tuple = ()) -> None:
-        from storykit import story as ST
+        from pm_storykit import story as ST
 
         table = {"quest": "QuestInfo", "avatar": "PlayerAvatarInfo",
                  "world": "WorldInfo"}[self.st_tab]
@@ -1325,7 +1325,7 @@ def main() -> int:
     except KeyboardInterrupt:
         return 130
 
-    shot = os.environ.get("PM_STORY_SHOT")
+    shot = os.environ.get("PM_STORYKIT_SHOT")
     if shot and app.autotest:
         try:
             arr = np.asarray(hello_imgui.final_app_window_screenshot())

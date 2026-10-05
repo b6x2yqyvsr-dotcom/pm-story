@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 口蘑剧情编辑器 · 建虚拟环境并装依赖
+# 口蘑剧情工坊 · 建虚拟环境并装依赖
 set -u
 cd "$(dirname "$0")" || exit 1
 
@@ -7,7 +7,7 @@ PY="${PYTHON:-python3}"
 command -v "$PY" >/dev/null 2>&1 || { echo "  没找到 python3，先装 Python 3.10+"; exit 1; }
 
 echo
-echo "  口蘑剧情编辑器 · 环境准备"
+echo "  口蘑剧情工坊 · 环境准备"
 echo "  ────────────────────────────────────────"
 echo "  使用解释器：$("$PY" -c 'import sys;print(sys.version.split()[0], "(" + sys.executable + ")")')"
 
@@ -28,11 +28,11 @@ import sys
 sys.path.insert(0, ".")
 try:
     import imgui_bundle, UnityPy, PIL, numpy  # noqa: F401
-    from storykit import story, session  # noqa: F401
+    from pm_storykit import story, session  # noqa: F401
 except Exception as exc:  # noqa: BLE001
     print(f"  ✗ 自检没过：{type(exc).__name__}: {exc}")
     raise SystemExit(1)
-print("  ✓ 依赖齐全，storykit 能导入")
+print("  ✓ 依赖齐全，pm_storykit 能导入")
 PYEOF
 [ $? -ne 0 ] && exit 1
 

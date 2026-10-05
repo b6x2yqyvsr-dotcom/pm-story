@@ -1,10 +1,10 @@
-# 口蘑剧情编辑器
+# 口蘑剧情工坊
 
-Pocket Mortys **单人剧情**编辑器 —— 改任务对白、对战训练师（含出场队伍）、
-我方皮肤、地图。
+Pocket Mortys **单人剧情**工坊 —— 改任务对白、对战训练师（含出场队伍）、
+我方皮肤、地图、新手教程。
 
 > 从 [pm-modkit](https://github.com/b6x2yqyvsr-dotcom/pm-modkit) 里**独立出来**的。
-> 它不依赖 pm-modkit，自己带着需要的那几个内核模块（`storykit/`）。
+> 它不依赖 pm-modkit，自己带着需要的那几个内核模块（`pm_storykit/`）。
 
 ![剧情编辑器](docs/界面截图-剧情编辑器.png)
 
@@ -275,6 +275,13 @@ WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_4            如果我能把刚才捡到的
 
 ## 怎么用
 
+克隆下来之后目录就叫 `pm-storykit`：
+
+```bash
+git clone https://github.com/b6x2yqyvsr-dotcom/pm-storykit.git
+cd pm-storykit
+```
+
 ### 图形界面
 
 macOS / Linux：双击 `启动.command` / `bash 启动.sh`
@@ -325,7 +332,7 @@ python3 tools/cli.py check 加强版.apk
 
 ## 剧情体检
 
-`storykit.story.validate()` 会查剧情表和文本对不对得上：
+`pm_storykit.story.validate()` 会查剧情表和文本对不对得上：
 
 ```
 ✗ 1 个问题：
@@ -346,7 +353,7 @@ python3 tools/cli.py check 加强版.apk
 ## 目录结构
 
 ```
-storykit/          内核（自带，不依赖 pm-modkit）
+pm_storykit/          内核（自带，不依赖 pm-modkit）
   story.py         **单人剧情本体**
   session.py       一次编辑会话（打开源 / 改 / 出产物）
   source.py        APK / zip / 目录 → 容器 → bundle 引用
