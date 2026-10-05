@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.spec
+*.ini
+导出/
+UnityCache产物/
+.DS_Store
+*.apk
+*.zip
+!docs/*.zip

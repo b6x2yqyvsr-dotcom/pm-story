@@ -1,0 +1,12 @@
+# 桌面版（图形界面）
+UnityPy==1.25.3
+Pillow>=10
+numpy>=1.24
+imgui-bundle>=1.92.900
+lz4
+brotli
+texture2ddecoder
+astc-encoder-py
+etcpak
+fmod-toolkit
+archspec

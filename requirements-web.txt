@@ -1,0 +1,10 @@
+# 网页版 / 只改剧情的命令行（不装 imgui / numpy）
+UnityPy==1.25.3
+Pillow>=10
+lz4
+brotli
+texture2ddecoder
+astc-encoder-py
+etcpak
+fmod-toolkit
+archspec
