@@ -1,47 +1,46 @@
-#!/bin/sh
-# 口蘑 Mod 工坊 —— Linux / macOS 一次性环境准备
-#
-#   sh setup.sh
-#
-# 会创建自带的 .venv 并装好依赖，不动系统 Python。
-set -e
-cd "$(dirname "$0")"
+#!/usr/bin/env bash
+# 口蘑剧情编辑器 · 建虚拟环境并装依赖
+set -u
+cd "$(dirname "$0")" || exit 1
 
 PY="${PYTHON:-python3}"
-if ! command -v "$PY" >/dev/null 2>&1; then
-    echo "没找到 $PY。Linux 上装一下：sudo apt install python3 python3-venv python3-pip"
-    echo "（Debian/Ubuntu 需要 python3-venv 才能建虚拟环境）"
-    exit 1
-fi
-echo "使用解释器：$($PY -V 2>&1)  ($(command -v "$PY"))"
+command -v "$PY" >/dev/null 2>&1 || { echo "  没找到 python3，先装 Python 3.10+"; exit 1; }
 
-if [ ! -d .venv ]; then
-    echo "[1/3] 创建 .venv"
-    "$PY" -m venv .venv
-else
-    echo "[1/3] .venv 已存在，跳过"
-fi
+echo
+echo "  口蘑剧情编辑器 · 环境准备"
+echo "  ────────────────────────────────────────"
+echo "  使用解释器：$("$PY" -c 'import sys;print(sys.version.split()[0], "(" + sys.executable + ")")')"
 
-echo "[2/3] 安装依赖（第一次会下载约 100MB）"
-./.venv/bin/pip install --quiet --upgrade pip
-./.venv/bin/pip install --quiet -r requirements.txt
+echo
+echo "  [1/3] 创建 .venv"
+[ -d .venv ] || "$PY" -m venv .venv || { echo "  建虚拟环境失败"; exit 1; }
+VPY=".venv/bin/python"
+[ -x "$VPY" ] || VPY=".venv/Scripts/python.exe"
 
-echo "[3/3] 环境自检"
-./.venv/bin/python - <<'PY' || true
+echo "  [2/3] 安装依赖（第一次会下载约 100MB）"
+"$VPY" -m pip install -q --upgrade pip
+"$VPY" -m pip install -q -r requirements.txt || {
+  echo "  依赖装失败。手动试试： $VPY -m pip install -r requirements.txt"; exit 1; }
+
+echo "  [3/3] 环境自检"
+"$VPY" - <<'PYEOF'
 import sys
 sys.path.insert(0, ".")
-from modkit import sysenv
-for k, v in sysenv.describe().items():
-    print(f"  {k:<12}{v or '未找到'}")
-PY
+try:
+    import imgui_bundle, UnityPy, PIL, numpy  # noqa: F401
+    from storykit import story, session  # noqa: F401
+except Exception as exc:  # noqa: BLE001
+    print(f"  ✗ 自检没过：{type(exc).__name__}: {exc}")
+    raise SystemExit(1)
+print("  ✓ 依赖齐全，storykit 能导入")
+PYEOF
+[ $? -ne 0 ] && exit 1
 
 echo
-echo "完成。启动方式："
-echo "    ./启动.sh          桌面图形界面（需要图形环境）"
-echo "    ./启动网页版.sh     网页界面（手机连同一个 Wi-Fi 也能用）"
-echo "或直接："
-echo "    ./.venv/bin/python app/main.py"
-echo "    ./.venv/bin/python web/server.py"
+echo "  完成。启动方式："
+echo "      ./启动.command       macOS 双击即可"
+echo "      bash 启动.sh         Linux"
+echo "      启动.bat             Windows"
+echo "  或直接： $VPY app/main.py"
+echo "  命令行： $VPY tools/cli.py --help"
 echo
-echo "注意：APK 重打包签名需要 apksigner / zipalign / JDK。"
-echo "      Debian/Ubuntu: sudo apt install android-sdk-build-tools default-jdk"

@@ -190,8 +190,10 @@ class StoryApp:
 
         threading.Thread(target=_run, daemon=True).start()
 
-    def pick_open(self, title: str, filters: list[str]) -> list[str]:
-        dlg = pfd.open_file(title, None, filters, pfd.opt.multiselect_files)
+    def pick_open(self, title: str, filters: list[str], multi: bool = True) -> list[str]:
+        # 枚举名是 pfd.opt.multiselect，不是 multiselect_files（后者不存在）
+        opt = pfd.opt.multiselect if multi else pfd.opt.none
+        dlg = pfd.open_file(title, str(Path.home()), filters, opt)
         return list(dlg.result() or [])
 
     def _open_now(self, paths: list[str]) -> None:
