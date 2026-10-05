@@ -287,20 +287,35 @@ class StoryApp:
         r = self.sess.output_cache(out_dir, allow_broken=True)
         return f"✓ 导出到 {r['dir']}（{len(r['written'])} 个包）"
 
+    _TABS = ("quest", "trainer", "npc", "avatar", "world")
+
     def _autotest(self) -> None:
-        if self._frame == 2 and self.sess.source is not None:
+        """每帧切一个页签 —— 必须**真的画一遍**每个页签。
+
+        只在循环里换状态是不够的：`_draw_story_editor` 只画当前页签，
+        循环结束时停在最后一个，前面几个的绘制路径根本没走到。
+        （免疫：我方皮肤那个页签会调 immvision.image，色彩顺序没设的话
+        正好是在这一步 panic，光换状态是发现不了的。）
+        """
+        pin = os.environ.get("PM_STORY_TAB")
+        if self._frame == 1 and self.sess.source is not None:
             self.show_story = True
             self._st_reset()
-        if self._frame == 3 and self.sess.source is not None:
-            for tab in ("quest", "trainer", "npc", "avatar", "world"):
-                self.st_tab = tab
-                rows = self._st_rows()
-                assert rows, f"「{tab}」读不到条目"
-                self.st_sel = rows[0]["id"]
-                self.st_loaded = ""
-                self._st_load()
-                assert self.st_fields, f"「{tab}」读不到文本"
-            print(f"[自检] 剧情：{self._st_overview().counts()}", flush=True)
+            if pin:
+                self.st_tab = pin
+        elif self._frame >= 2 and self.sess.source is not None:
+            i = (self._frame - 2) % len(self._TABS)
+            tab = pin or self._TABS[i]
+            self.st_tab = tab
+            rows = self._st_rows()
+            assert rows, f"「{tab}」读不到条目"
+            if self.st_sel not in [r["id"] for r in rows]:
+                self.st_sel = next((r["id"] for r in rows if r.get("team_n")), rows[0]["id"])
+            self.st_loaded = ""
+            self._st_load()
+            assert self.st_fields, f"「{tab}」读不到文本"
+            if i == len(self._TABS) - 1:
+                print(f"[自检] 剧情：{self._st_overview().counts()}", flush=True)
         if self._frame >= self.autotest:
             print(f"[自检] 渲染 {self._frame} 帧无异常，退出", flush=True)
 
@@ -716,6 +731,10 @@ def _ellipsis(s: str, n: int) -> str:
 
 
 def main() -> int:
+    # ImmVision 要求**先声明通道顺序**再显示任何图（2024-10 起的破坏性变更）。
+    # 不设的话第一次 immvision.image() 就 panic。抽离时漏过一次。
+    immvision.use_rgb_color_order()
+
     paths = [p for p in sys.argv[1:] if Path(p).exists()]
     app = StoryApp(paths)
     params = hello_imgui.RunnerParams()
@@ -725,7 +744,20 @@ def main() -> int:
     params.app_window_params.window_geometry.size = (1180, 800)
     params.imgui_window_params.default_imgui_window_type = (
         hello_imgui.DefaultImGuiWindowType.provide_full_screen_window)
-    immapp.run(params)
+    params.imgui_window_params.show_status_bar = False
+    try:
+        immapp.run(params)
+    except KeyboardInterrupt:
+        return 130
+
+    shot = os.environ.get("PM_STORY_SHOT")
+    if shot and app.autotest:
+        try:
+            arr = np.asarray(hello_imgui.final_app_window_screenshot())
+            Image.fromarray(arr).save(shot)
+            print(f"[自检] 截图已保存：{shot}", flush=True)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[自检] 截图失败：{exc}", flush=True)
     return 0
 
 
