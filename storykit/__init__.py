@@ -11,6 +11,7 @@
     storykit.session   一次编辑会话（打开来源、改、出产物）
     storykit.entries   条目操作（列莫蒂等，剧情编辑器要用）
     storykit.effects   技能效果两种编码互转
+    storykit.diagnose  检测来源够不够用（APK 是不是完整版）
     storykit.fields    字段中英文对照
     storykit.story     **单人剧情本体**：任务对白 / 训练师 / 皮肤 / 地图
 """
@@ -21,6 +22,7 @@ from . import (  # noqa: F401
     apkbuild,
     assetops,
     bundle,
+    diagnose,
     effects,
     entries,
     fields,
@@ -33,7 +35,7 @@ from . import (  # noqa: F401
 )
 
 __all__ = [
-    "apkbuild", "assetops", "bundle", "effects", "entries", "fields",
+    "apkbuild", "assetops", "bundle", "diagnose", "effects", "entries", "fields",
     "modpack", "paths", "session", "source", "story", "sysenv",
     "__version__",
 ]

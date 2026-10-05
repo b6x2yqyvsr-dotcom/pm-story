@@ -155,6 +155,8 @@ class StoryApp:
         self._lock = threading.Lock()
         self._text_cache: dict = {}
         self.show_story = False
+        self.diag = None
+        self.show_diag = False
         self._st_reset()
         self.autotest = int(os.environ.get("PM_STORY_AUTOTEST", "0") or "0")
         self._frame = 0
@@ -206,6 +208,13 @@ class StoryApp:
             self._st_reset()
             self.log(f"✓ 打开 {len(paths)} 个来源，"
                      f"{len(self.sess.source.bundle_names())} 个资源包")
+            # 自动检测：不是完整版就直接说清楚哪些用不了
+            from storykit import diagnose as DG
+
+            self.diag = DG.inspect(self.sess)
+            for line in DG.format_report(self.diag, brief=False).split("\n"):
+                if line.strip():
+                    self.log(line)
         except Exception as exc:  # noqa: BLE001
             self.log(f"✗ 打开失败：{exc}")
 
@@ -246,6 +255,8 @@ class StoryApp:
 
         if self.show_story:
             self._draw_story()
+        if self.show_diag:
+            self._draw_diag()
 
         if self.autotest:
             self._frame += 1
@@ -271,6 +282,13 @@ class StoryApp:
             self._st_reset()
         _tip("单人剧情编辑器：任务对白、对战训练师、我方皮肤、地图")
         imgui.same_line()
+        if imgui.button("检测"):
+            from storykit import diagnose as DG
+
+            self.diag = DG.inspect(self.sess)
+            self.show_diag = True
+        _tip("看看这个 APK 是不是完整版；\n不是的话，哪些改动装不进 APK")
+        imgui.same_line()
         if imgui.button("导出…"):
             d = pfd.select_folder("导出到哪个目录")
             if d.result():
@@ -282,6 +300,63 @@ class StoryApp:
             _text_colored(DIM, "  " + (self.sess.source.summary()
                                        if hasattr(self.sess.source, "summary") else ""))
         imgui.separator()
+
+    def _draw_diag(self) -> None:
+        """来源检测报告。"""
+        from storykit import diagnose as DG
+
+        _center_next_window(imgui.ImVec2(700, 620))
+        opened, self.show_diag = imgui.begin("来源检测", self.show_diag)
+        if not opened:
+            imgui.end()
+            return
+        rep = self.diag or (DG.inspect(self.sess) if self.sess.source else None)
+        if rep is None or not rep.files:
+            _text_colored(WARN, "还没打开来源。")
+            imgui.end()
+            return
+
+        _text_colored(YELLOW, "计划 04")
+        imgui.same_line()
+        _mono("· SOURCE CHECK")
+        imgui.text("这个 APK 是完整版吗")
+        _text_colored(DIM, "游戏有两种放法：官方/精简包的资源靠首次运行下载，"
+                           "加强版（完整版）把资源全塞进 APK。")
+        imgui.separator()
+
+        for f in rep.files[:6]:
+            if f.complete:
+                _text_colored(GREEN, f"  ✓ [{f.kind}] {f.label}   自带 {f.bundles} 个包")
+            else:
+                _text_colored(DIM, f"    [{f.kind}] {f.label}   {f.bundles} 个包")
+        _text_colored(DIM, f"    合计 {rep.total_bundles} 个包；主 APK 里 {rep.apk_bundles} 个")
+        imgui.separator()
+
+        _text_colored(GREEN if rep.complete else WARN, "  " + rep.headline())
+        imgui.spacing()
+        for st in rep.features:
+            if not st.ok:
+                col, mark = (1.0, 0.45, 0.45, 1.0), "✗"
+            elif st.in_apk:
+                col, mark = GREEN, "✓"
+            else:
+                col, mark = WARN, "⚠"
+            _text_colored(col, f"  {mark} {st.name}")
+            imgui.same_line(240)
+            _text_colored(col, st.state())
+            if not st.ok:
+                _text_colored(DIM, f"        缺 {'、'.join(st.missing)} —— {st.note}")
+            elif not st.in_apk:
+                srcs = "、".join(f"{k} ← {v}" for k, v in st.where.items() if v)
+                _text_colored(DIM, f"        {srcs}")
+
+        adv = rep.advice()
+        if adv:
+            imgui.separator()
+            _text_colored(YELLOW, "  ▸ 怎么办")
+            for a in adv:
+                _text_colored(DIM, "    · " + a)
+        imgui.end()
 
     def _export(self, out_dir: str) -> str:
         r = self.sess.output_cache(out_dir, allow_broken=True)
@@ -301,9 +376,31 @@ class StoryApp:
         if self._frame == 1 and self.sess.source is not None:
             self.show_story = True
             self._st_reset()
+            if os.environ.get("PM_STORY_SHOW_DIAG") == "1":
+                from storykit import diagnose as DG
+
+                self.diag = DG.inspect(self.sess)
+                self.show_diag = True
             if pin:
                 self.st_tab = pin
         elif self._frame >= 2 and self.sess.source is not None:
+            from storykit import diagnose as DG
+
+            rep = DG.inspect(self.sess)
+            if any("spdata" in f.missing for f in rep.blocked):
+                # 这个来源根本没有 spdata（官方/精简包），剧情表读不到 ——
+                # 这正是「检测」要报告的事，不是 bug。这里验证报告本身。
+                assert not rep.complete, "没有 spdata 却判成完整版了"
+                assert rep.headline(), "检测报告没有结论"
+                assert rep.advice(), "检测报告没给怎么办"
+                only_text = [f for f in rep.features if f.ok]
+                assert any("对白" in f.name for f in only_text), \
+                    "text 在 APK 里，对白应该还能改"
+                if self._frame == 2:
+                    print(f"[自检] 非完整版检测：{rep.headline()}", flush=True)
+                    print(f"[自检] 用不了的功能 {len(rep.blocked)} 项，"
+                          f"还能用的 {len(only_text)} 项", flush=True)
+                return
             i = (self._frame - 2) % len(self._TABS)
             tab = pin or self._TABS[i]
             self.st_tab = tab

@@ -142,6 +142,16 @@ def cmd_team(a) -> int:
     return 0
 
 
+def cmd_diagnose(a) -> int:
+    """检测来源够不够用。"""
+    from storykit import diagnose as DG
+
+    s = _open(a.paths, a.lang)
+    rep = DG.inspect(s)
+    print(DG.format_report(rep))
+    return 0 if rep.complete else 1
+
+
 def cmd_export(a) -> int:
     s = _open(a.paths, a.lang)
     r = s.output_cache(a.out, allow_broken=True)
@@ -191,6 +201,10 @@ def main() -> int:
     p.add_argument("--morties", required=True, help='例如 "MortyA:5,MortyB:5"')
     p.add_argument("-o", "--out")
     p.set_defaults(fn=cmd_team)
+
+    p = sub.add_parser("diagnose", help="检测 APK 是不是完整版（不完整就列出哪些用不了）")
+    common(p)
+    p.set_defaults(fn=cmd_diagnose)
 
     p = sub.add_parser("export", help="导出改好的包")
     common(p)
