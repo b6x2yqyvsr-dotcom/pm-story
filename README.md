@@ -12,6 +12,7 @@ Pocket Mortys **单人剧情**编辑器 —— 改任务对白、对战训练师
 
 | 板块 | 内容 |
 |---|---|
+| **新手教程** | 主线教程对白（5 个阶段 18 段）+ 突袭教程 + 多人模式教程 + 教程路牌 / 训练师 / 世界 / 入口 |
 | **剧情任务** | 任务名 / 给予者 / 描述 / 进行中对白 / 交不齐时的 / 完成时 / 交付后 —— **7 段全可改**，外加徽章需求、需要的物品、给予者形象 |
 | **对战训练师** | 3 段战前对白 + 战后对白，**出场队伍编辑器**（换一只莫蒂就是换对方形象，等级可调） |
 | **NPC 对白** | 72 个 NPC 的名字和对白 |
@@ -79,6 +80,53 @@ Pocket Mortys **单人剧情**编辑器 —— 改任务对白、对战训练师
 ![无尺寸的地图](docs/界面截图-剧情-地图-无尺寸.png)
 
 改改主题就行，尺寸那两条滑条对它没意义。
+
+## 新手教程（单独一栏）
+
+![新手教程](docs/界面截图-剧情-新手教程.png)
+
+教程数据**散在好几处**，这个页签把它们收在一起：
+
+| 左边这一组 | 实际在哪 | 内容 |
+|---|---|---|
+| 主线教程对白 · 阶段 1~5 | `text/TextDefs` | `WORLD_DIALOGUE_TUTORIAL_PHASE_N_TEXT_M`，共 18 段 |
+| 突袭教程 | 同上 | `RAID_TUTORIAL_*`，6 段 |
+| 多人模式教程 | 同上 | `SWITCH_MODE_TUTORIAL_*`，4 段 |
+| 教程路牌 | `SignPostInfo` + `text/SignPost` | 3 条（拾取物品 / 追野生莫蒂 / 发起战斗的操作提示） |
+| 教程训练师 | `TrainerInfo` + `text/Trainer` | `TrainerTutorial`、`TrainerTutorialGymLeader` |
+| 教程世界 | `WorldInfo` | `Tutorial`，15×15，主题 Summer |
+| 教程入口 | `InteractionInfo` | `TutorialWorld`，从议会厅 `StoryTransition` 过去 |
+
+### 主线教程对白的实际内容
+
+打开「阶段 3」能看到 6 段，其中还带分支变体：
+
+```
+WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_1            那边有个莫蒂！*瑞克，他跟我长得一模一样，就是比我脏了一点。
+WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_1_BABY       年轻版
+WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_1_PARAMERTIZED 快看，另一个莫蒂！*瑞克，他看起来很像{0}的我。
+WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_2            对，孩子。他肯定跟他的瑞克走失了。现在变成了一个迷路的野孩子。
+WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_3            哦，瑞克，那太可怕了！我们帮帮他。
+WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_4            如果我能把刚才捡到的那个芯片植入他的身体，他就会以为自己属于我们了。*不过……
+```
+
+**`{0}` 是游戏运行时填的参数**（比如次元名、玩家名），改文本的时候别把它删了 —— 删了游戏拼不出那句话。
+
+### 为什么教程文本在 `TextDefs` 里
+
+`TextDefs` 是个 1295 条的大杂烩（`PLAYER_NAME`、任务提示、界面文字都在里面）。
+教程那部分靠键名前缀区分（`WORLD_DIALOGUE_TUTORIAL_*` / `RAID_TUTORIAL_*` /
+`SWITCH_MODE_TUTORIAL_*`），所以这里按前缀挑出来分组，不是单独一张表。
+
+### 体检会盯着教程
+
+剧情体检里加了一条：**主线五个阶段的第 1 段不能缺**。缺了游戏走到那一步
+会直接显示成 ID：
+
+```
+⚠ 新手教程：主线阶段 3 的第 1 段文本没了（WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_1*）
+   —— 游戏走到那一步会显示成 ID
+```
 
 ## 自动检测：这个 APK 是完整版吗
 
@@ -180,6 +228,14 @@ Windows：双击 `启动.bat`
 # 列清单
 python3 tools/cli.py list 加强版.apk --what quest
 python3 tools/cli.py list 加强版.apk --what trainer
+
+# 看新手教程的全部文本
+python3 tools/cli.py tutorial 加强版.apk
+
+# 改一段教程对白
+python3 tools/cli.py set 加强版.apk --what tutorial \
+    --id WORLD_DIALOGUE_TUTORIAL_PHASE_1_TEXT_1 \
+    --label "莫蒂，这肯定是那个{0}的次元。我们去找找他。" -o 导出目录
 
 # 看一条的全文（对白 + 队伍 + 数据）
 python3 tools/cli.py show 加强版.apk --what trainer --id TrainerCouncil1

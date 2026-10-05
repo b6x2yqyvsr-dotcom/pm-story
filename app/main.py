@@ -362,7 +362,7 @@ class StoryApp:
         r = self.sess.output_cache(out_dir, allow_broken=True)
         return f"✓ 导出到 {r['dir']}（{len(r['written'])} 个包）"
 
-    _TABS = ("quest", "trainer", "npc", "avatar", "world")
+    _TABS = ("tutorial", "quest", "trainer", "npc", "avatar", "world")
 
     def _autotest(self) -> None:
         """每帧切一个页签 —— 必须**真的画一遍**每个页签。
@@ -456,6 +456,7 @@ class StoryApp:
     # 和 text/<语言> 的段（对白文本）。这个窗口把两边并到一起改。
 
     STORY_TABS = [
+        ("tutorial", "新手教程", "TUTORIAL"),
         ("quest", "剧情任务", "QUESTS"),
         ("trainer", "对战训练师", "TRAINERS"),
         ("npc", "NPC 对白", "NPC"),
@@ -474,6 +475,8 @@ class StoryApp:
         self.st_msg = ""
         self.st_ov = None
         self.st_map = None
+        self.st_tut_extra = None
+        self._st_tut = None
         self.st_map_show_sim = True
         self._st_themes = []
         self.st_new_id = ""
@@ -489,10 +492,52 @@ class StoryApp:
 
     def _st_rows(self) -> list[dict]:
         ov = self._st_overview()
+        if self.st_tab == "tutorial":
+            return self._st_tut_rows()
         return {
             "quest": ov.quests, "trainer": ov.trainers, "npc": ov.npcs,
             "avatar": ov.avatars, "world": ov.worlds,
         }.get(self.st_tab, [])
+
+    def _st_tut_rows(self) -> list[dict]:
+        """新手教程的「列表」：文本分组 + 非文本部分。"""
+        from storykit import story as ST
+
+        if getattr(self, "_st_tut", None) is None:
+            self._st_tut = (ST.tutorial_texts(self.sess, self.st_lang),
+                            ST.tutorial_extras(self.sess, self.st_lang))
+        texts, extras = self._st_tut
+        rows: list[dict] = []
+        for g in texts:
+            rows.append({
+                "id": "text:" + g["key"],
+                "name": f"{g['group']} · {g['label']}" if g["stage"] else g["group"],
+                "zh": g["label"], "kind": "text", "group": g,
+                "n": len(g["items"]),
+            })
+        for e in extras:
+            rows.append({
+                "id": "tbl:" + e["table"], "name": e["label"],
+                "zh": e["label"], "kind": "table", "extra": e, "n": len(e["rows"]),
+            })
+        return rows
+
+    def _st_tut_load(self) -> None:
+        """把选中的教程分组读进编辑缓冲。"""
+        row = next((r for r in self._st_tut_rows() if r["id"] == self.st_sel), None)
+        if row is None:
+            return
+        self.st_fields = {}
+        self.st_team = []
+        if row["kind"] == "text":
+            for it in row["group"]["items"]:
+                self.st_fields[it["id"]] = it["text"]
+        else:
+            e = row["extra"]
+            self.st_tut_extra = e
+            for r in e["rows"]:
+                if r.get("dialogue") is not None:
+                    self.st_fields[r["id"]] = r.get("dialogue", "")
 
     def _st_load(self) -> None:
         """把选中的那条读进编辑缓冲。"""
@@ -504,7 +549,11 @@ class StoryApp:
         self.st_fields = {}
         self.st_team = []
         self._st_img = None
+        self.st_tut_extra = None
         if not self.st_sel:
+            return
+        if self.st_tab == "tutorial":
+            self._st_tut_load()
             return
 
         sec_key = {"quest": "Quest", "trainer": "Trainer", "npc": "NPC",
@@ -566,6 +615,8 @@ class StoryApp:
 
         if not self.st_sel:
             return "✗ 先选一条"
+        if self.st_tab == "tutorial":
+            return self._st_tut_apply()
         sec_key = {"quest": "Quest", "trainer": "Trainer", "npc": "NPC",
                    "avatar": "PlayerAvatar", "world": "Dimensions"}[self.st_tab]
         langs = ST.LANGS if self.st_all_langs else [self.st_lang]
@@ -605,6 +656,8 @@ class StoryApp:
         nid = (self.st_new_id or "").strip()
         if not nid or not self.st_sel:
             return "✗ 填个新 ID，并先选一个克隆源"
+        if self.st_tab == "tutorial":
+            return "✗ 教程文本是固定的一串键（PHASE_1..5），没有「克隆一条」这回事"
         sec_key = {"quest": "Quest", "trainer": "Trainer", "npc": "NPC",
                    "avatar": "PlayerAvatar", "world": "Dimensions"}[self.st_tab]
         try:
@@ -673,6 +726,7 @@ class StoryApp:
         if ch:
             self.st_lang = langs[ci]
             self.st_ov = None
+            self._st_tut = None
             self.st_loaded = ""
         _tip("改哪个语言的文本。上面「应用到全部语言」勾上就是 11 种一起写。")
 
@@ -703,7 +757,12 @@ class StoryApp:
                 if on:
                     imgui.pop_style_color()
                 imgui.same_line()
-                _mono(r["id"])
+                if self.st_tab == "tutorial":
+                    # 教程行的 id 是 text:xxx / tbl:Xxx，显示出来没意义，改成段数
+                    imgui.same_line(max(0.0, imgui.get_window_width() - 60))
+                    _text_colored(GREEN if r.get("kind") == "text" else DIM, f"{r['n']} 段")
+                else:
+                    _mono(r["id"])
                 if self.st_tab == "trainer" and r.get("team_n"):
                     imgui.same_line(max(0.0, imgui.get_window_width() - 60))
                     _text_colored(GREEN, f"{r['team_n']}只")
@@ -751,6 +810,9 @@ class StoryApp:
     def _draw_story_editor(self) -> None:
         from storykit import story as ST
 
+        if self.st_tab == "tutorial":
+            self._draw_tutorial_editor()
+            return
         sec_key = {"quest": "Quest", "trainer": "Trainer", "npc": "NPC",
                    "avatar": "PlayerAvatar", "world": "Dimensions"}[self.st_tab]
         sec = ST.SECTION_BY_KEY[sec_key]
@@ -869,6 +931,75 @@ class StoryApp:
 
         self.st_map = WM.from_row(data) if data else None
         self.st_map_show_sim = True
+
+    def _draw_tutorial_editor(self) -> None:
+        """新手教程的编辑区。
+
+        教程文本在 ``TextDefs`` 里，键形如
+        ``WORLD_DIALOGUE_TUTORIAL_PHASE_3_TEXT_1`` —— 一个阶段好几段。
+        所以这里不是「一条记录几个字段」，而是**一段一段往下排**。
+        """
+        from storykit import story as ST
+
+        row = next((r for r in self._st_tut_rows() if r["id"] == self.st_sel), None)
+        if row is None:
+            _text_colored(DIM, "左边挑一组。")
+            return
+
+        _text_colored(YELLOW, f"▸ {row['name']}")
+        imgui.same_line()
+        _mono(f"  {row['n']} 段")
+        if row["kind"] == "text":
+            _text_colored(DIM, "   教程对白 —— 每段都能改，改完点底部「应用」")
+        else:
+            _text_colored(DIM, "   这一组不是纯文本，下面是它的数据和可改的文本")
+
+        imgui.separator()
+
+        # 非文本组：先把它是什么说清楚
+        if row["kind"] == "table":
+            e = row["extra"]
+            for r in e["rows"]:
+                imgui.text(r["id"])
+                imgui.same_line(240)
+                bits = []
+                if r.get("team") is not None:
+                    bits.append(f"队伍 {len(r['team'])} 只")
+                if r.get("size"):
+                    bits.append(f"{r['size']} 主题 {r['theme']}")
+                if r.get("data", {}).get("interactiontype"):
+                    bits.append(str(r["data"]["interactiontype"]))
+                if bits:
+                    _text_colored(GREEN, " · ".join(bits))
+            imgui.separator()
+
+        # 一段一段的文本
+        for fname, val in self.st_fields.items():
+            _mono(fname)
+            imgui.set_next_item_width(-1)
+            ch, v = imgui.input_text_multiline(f"##tut_{fname}", val, imgui.ImVec2(0, 46))
+            if ch:
+                self.st_fields[fname] = v
+            if not str(val).strip():
+                _text_colored(DIM, "  （空 —— 游戏里这段不显示）")
+
+    def _st_tut_apply(self) -> str:
+        """写回教程文本（TextDefs）。"""
+        from storykit import story as ST
+
+        row = next((r for r in self._st_tut_rows() if r["id"] == self.st_sel), None)
+        if row is None:
+            return "✗ 先选一组"
+        if row["kind"] != "text":
+            return "✗ 这一组不是纯文本 —— 教程路牌/训练师请到对应的页签改"
+        langs = ST.LANGS if self.st_all_langs else [self.st_lang]
+        n = 0
+        for k, v in self.st_fields.items():
+            if ST.set_textdef(self.sess, k, v, langs):
+                n += 1
+        self._text_cache.clear()
+        self._st_tut = None      # 让列表里的文本刷新
+        return f"✓ {row['name']}：改了 {n} 段（{len(langs)} 种语言）"
 
     def _draw_story_map(self) -> None:
         from storykit import worldmap as WM

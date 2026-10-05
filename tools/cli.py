@@ -33,7 +33,7 @@ from storykit import session as session_mod  # noqa: E402
 from storykit import story as ST  # noqa: E402
 
 SEC = {"quest": "Quest", "trainer": "Trainer", "npc": "NPC",
-       "avatar": "PlayerAvatar", "world": "Dimensions"}
+       "avatar": "PlayerAvatar", "world": "Dimensions", "tutorial": "TextDefs"}
 TBL = {"quest": "QuestInfo", "trainer": "TrainerInfo", "npc": "NPCInfo",
        "avatar": "PlayerAvatarInfo", "world": "WorldInfo"}
 
@@ -108,6 +108,17 @@ def cmd_check(a) -> int:
 
 def cmd_set(a) -> int:
     s = _open(a.paths, a.lang)
+    if a.what == "tutorial":
+        # 教程一步到位：--id 是 TextDefs 的键
+        if a.label is None:
+            print("  教程要加 --label \"新文本\"")
+            return 2
+        done = ST.set_textdef(s, a.id, a.label, ST.LANGS if a.all_langs else [a.lang])
+        print(f"\n  ✓ {a.id}: {'、'.join(done) if done else '没有变化'}")
+        if a.out:
+            r = s.output_cache(a.out, allow_broken=True)
+            print(f"  ✓ 导出到 {r['dir']}（{len(r['written'])} 个包）")
+        return 0
     vals = {}
     for spec in a.field or []:
         k, _, v = spec.partition("=")
@@ -139,6 +150,29 @@ def cmd_team(a) -> int:
     if a.out:
         r = s.output_cache(a.out, allow_broken=True)
         print(f"  ✓ 导出到 {r['dir']}（{len(r['written'])} 个包）")
+    return 0
+
+
+def cmd_tutorial(a) -> int:
+    """列出新手教程的全部文本。"""
+    s = _open(a.paths, a.lang)
+    print(f"\n  新手教程（{ST.LANG_LABEL.get(a.lang, a.lang)}）")
+    for g in ST.tutorial_texts(s, a.lang):
+        print(f"\n  ▸ {g['group']} · {g['label']}  （{len(g['items'])} 段）")
+        for it in g["items"]:
+            print(f"      {it['id']:<52} {it['text'][:44]}")
+    print("\n  ▸ 其它")
+    for e in ST.tutorial_extras(s, a.lang):
+        print(f"      {e['label']:<10} {e['table']:<18} {len(e['rows'])} 条")
+        for r in e["rows"]:
+            extra = ""
+            if r.get("dialogue"):
+                extra = "  " + r["dialogue"][:40]
+            elif r.get("team") is not None:
+                extra = f"  队伍 {len(r['team'])} 只"
+            elif r.get("size"):
+                extra = f"  {r['size']} 主题 {r['theme']}"
+            print(f"        {r['id']:<30}{extra}")
     return 0
 
 
@@ -188,9 +222,10 @@ def main() -> int:
     p = sub.add_parser("set", help="改剧情文本")
     common(p)
     p.add_argument("--what", default="quest",
-                   choices=["quest", "trainer", "npc", "avatar", "world"])
+                   choices=["quest", "trainer", "npc", "avatar", "world", "tutorial"])
     p.add_argument("--id", required=True)
     p.add_argument("--field", action="append", metavar="键=值")
+    p.add_argument("--label", help="教程文本（--what tutorial 时用这个）")
     p.add_argument("--all-langs", action="store_true", help="11 种语言一起写")
     p.add_argument("-o", "--out", help="改完顺便导出到这个目录")
     p.set_defaults(fn=cmd_set)
@@ -201,6 +236,10 @@ def main() -> int:
     p.add_argument("--morties", required=True, help='例如 "MortyA:5,MortyB:5"')
     p.add_argument("-o", "--out")
     p.set_defaults(fn=cmd_team)
+
+    p = sub.add_parser("tutorial", help="看新手教程的全部文本")
+    common(p)
+    p.set_defaults(fn=cmd_tutorial)
 
     p = sub.add_parser("diagnose", help="检测 APK 是不是完整版（不完整就列出哪些用不了）")
     common(p)

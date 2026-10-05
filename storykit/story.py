@@ -96,6 +96,30 @@ SECTIONS = [
 
 SECTION_BY_KEY = {s.key: s for s in SECTIONS}
 
+#: 新手教程的文本都在 ``TextDefs`` 里（那个段有 1295 个键，绝大多数和教程无关，
+#: 所以按前缀挑出来分组）。实测结构：
+#:
+#: * ``WORLD_DIALOGUE_TUTORIAL_PHASE_1..5`` —— **主线教程对白**，5 个阶段 18 段
+#:   （阶段 3/4 里还有 ``_BABY`` / ``_PARAMERTIZED`` 这种分支变体）
+#: * ``RAID_TUTORIAL_*`` —— 突袭教程 6 段
+#: * ``SWITCH_MODE_TUTORIAL_*`` —— 战役/多人切换教程 4 段
+TUTORIAL_GROUPS: list[tuple[str, str, str]] = [
+    ("world", "主线教程对白", r"^WORLD_DIALOGUE_TUTORIAL_PHASE_(\d+)"),
+    ("raid", "突袭教程", r"^RAID_TUTORIAL"),
+    ("switch", "多人模式教程", r"^SWITCH_MODE_TUTORIAL"),
+    ("storage", "仓库引导", r"^FTUE_QUEST_"),
+    ("dim", "次元新手引导", r"^MP_DIMENSION_FTUE|^[A-Z]+_DIMENSION_FTUE"),
+    ("shiny", "闪光药水引导", r"^SHINYPOTION_FTUE"),
+]
+
+#: 教程用到的那几张表/条目（除文本之外的）
+TUTORIAL_TABLES = [
+    ("SignPostInfo", "SignPost", "教程路牌", r"^SignPostTutorial"),
+    ("TrainerInfo", "Trainer", "教程训练师", r"^TrainerTutorial"),
+    ("WorldInfo", "Dimensions", "教程世界", r"^Tutorial$"),
+    ("InteractionInfo", "Interactions", "教程入口", r"^Tutorial"),
+]
+
 #: 数据表里的字段中文名
 TABLE_FIELD_LABEL = {
     "QuestInfo": {
@@ -394,6 +418,112 @@ def add_entry(sess: Session, section_key: str, new_id: str, clone_from: str) -> 
 # ---------------------------------------------------------------- 校验
 
 
+# ---------------------------------------------------------------- 新手教程
+
+
+def _textdef_label(row) -> str:
+    """``TextDefs`` 的条目字段叫 ``label``（不是 name/dialogue）。"""
+    if isinstance(row, dict):
+        return str(row.get("label", "") or "")
+    return str(row or "")
+
+
+def tutorial_texts(sess: Session, lang: str = "ZH_CN") -> list[dict]:
+    """把所有教程文本按组整理出来。
+
+    返回 ``[{key, label, stage, items:[{id, text}]}]`` —— ``stage`` 是主线教程的
+    阶段号（1~5），其它组为 0。
+    """
+    import re
+
+    tx = read_texts(sess, lang)
+    td = tx.get("TextDefs") or {}
+    out: list[dict] = []
+    used: set[str] = set()
+    for gkey, glabel, pattern in TUTORIAL_GROUPS:
+        rx = re.compile(pattern)
+        hits = [k for k in td if rx.search(k)]
+        if not hits:
+            continue
+        used.update(hits)
+        # 主线教程按阶段再分一层
+        if gkey == "world":
+            stages: dict[int, list[str]] = {}
+            for k in hits:
+                m = rx.search(k)
+                n = int(m.group(1)) if m and m.groups() else 0
+                stages.setdefault(n, []).append(k)
+            for n in sorted(stages):
+                out.append({
+                    "key": f"world{n}", "label": f"阶段 {n}", "stage": n,
+                    "group": glabel,
+                    "items": [{"id": k, "text": _textdef_label(td[k])}
+                              for k in sorted(stages[n])],
+                })
+        else:
+            out.append({
+                "key": gkey, "label": glabel, "stage": 0, "group": glabel,
+                "items": [{"id": k, "text": _textdef_label(td[k])} for k in sorted(hits)],
+            })
+    return out
+
+
+def tutorial_extras(sess: Session, lang: str = "ZH_CN") -> list[dict]:
+    """教程相关的**非文本**部分：路牌、训练师、世界、入口。"""
+    import re
+
+    tx = read_texts(sess, lang)
+    out: list[dict] = []
+    for table, sec, label, pattern in TUTORIAL_TABLES:
+        rx = re.compile(pattern)
+        data = read_table(sess, table)
+        hits = {k: v for k, v in data.items() if rx.search(k)}
+        if not hits:
+            continue
+        rows = []
+        for k, v in sorted(hits.items()):
+            v = v if isinstance(v, dict) else {}
+            t = (tx.get(sec) or {}).get(k) or {}
+            item = {"id": k, "data": v, "text": t}
+            if table == "TrainerInfo":
+                item["team"] = parse_team(v.get("morties") or "")
+            if table == "SignPostInfo":
+                item["dialogue"] = t.get("dialogue", "")
+            if table == "WorldInfo":
+                item["size"] = f"{v.get('segmentwidth')}×{v.get('segmentdepth')}"
+                item["theme"] = v.get("materialid") or ""
+            rows.append(item)
+        out.append({"table": table, "section": sec, "label": label, "rows": rows})
+    return out
+
+
+def set_textdef(sess: Session, key: str, value: str,
+                langs: list[str] | None = None) -> list[str]:
+    """改 ``TextDefs``（教程文本）里的一条。"""
+    langs = langs or ["ZH_CN"]
+    done: list[str] = []
+    for lang in langs:
+        b, data = _read_json(sess, "text", lang)
+        if b is None or not isinstance(data, dict):
+            continue
+        td = data.get("TextDefs")
+        if not isinstance(td, dict):
+            td = {}
+            data["TextDefs"] = td
+        row = td.get(key)
+        if isinstance(row, dict):
+            if row.get("label") == value:
+                continue
+            row["label"] = value
+        else:
+            td[key] = {"label": value}
+        e = next((a for a in b.assets if a.name == lang), None)
+        if e is not None:
+            b.modify_text(e, json.dumps(data, ensure_ascii=False))
+            done.append(f"{LANG_LABEL.get(lang, lang)} 已更新")
+    return done
+
+
 def validate(sess: Session, lang: str = "ZH_CN") -> list[str]:
     """体检：剧情表和文本对不对得上。"""
     issues: list[str] = []
@@ -412,6 +542,14 @@ def validate(sess: Session, lang: str = "ZH_CN") -> list[str]:
             issues.append(
                 f"{sec.label}：{len(miss)} 个条目在 text/{lang}.{sec.key} 里没有文本"
                 f"（例如 {miss[0]}）—— 游戏里会显示成 ID")
+    # 教程文本：主线五个阶段别缺段
+    td = tx.get("TextDefs") or {}
+    for n in range(1, 6):
+        pref = f"WORLD_DIALOGUE_TUTORIAL_PHASE_{n}_TEXT_1"
+        if not any(k.startswith(pref) for k in td):
+            issues.append(f"新手教程：主线阶段 {n} 的第 1 段文本没了（{pref}*）—— "
+                          f"游戏走到那一步会显示成 ID")
+
     # 训练师队伍里的莫蒂存不存在
     morties = set(read_table(sess, "MortyInfo"))
     for tid, row in read_table(sess, "TrainerInfo").items():
