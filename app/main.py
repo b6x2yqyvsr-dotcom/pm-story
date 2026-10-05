@@ -496,11 +496,23 @@ class StoryApp:
                           f"野怪候选 {len(L['candidates'])} 只，"
                           f"世界 {L['world']['id']} {L['world']['size']}", flush=True)
                 return
-            # 下拉标签里不能出现 JSON —— text/Morty 的条目是字典，
-            # 忘了取 ["name"] 就会把整段 JSON 显示出来（踩过两次）
+            # 下拉标签不能出现 JSON。**同时查源码** —— 函数级断言拦不住
+            # 「函数写对了但调用点忘了用」这种情况（真踩过：morty_label 抽好了，
+            # 出场队伍那行却仍是内联的字典格式化，显示成整段 JSON，
+            # 而自检全绿）。
             from pm_storykit import story as _ST
 
             _loc = (_ST.read_texts(self.sess, "ZH_CN").get("Morty") or {})
+            import pathlib as _pl
+
+            _src = _pl.Path(__file__).read_text()
+            # 拼接构造，不然断言里的字面量自己就出现在源码里，必然命中
+            _bad1 = "loc.get(x)" + " or x"
+            _bad2 = "f\"{(loc." + "get("
+            assert _bad1 not in _src, \
+                "还有地方把 text/Morty 的字典直接当字符串用（会显示成 JSON）"
+            assert _bad2 not in _src, \
+                "还有内联的 loc.get(...) 格式化 —— 应该用 morty_label()"
             for _mid in list(_loc)[:80]:
                 _lb = self.morty_label(_loc, _mid)
                 assert not _lb.lstrip().startswith("{"), \
@@ -1024,7 +1036,7 @@ class StoryApp:
             imgui.set_next_item_width(280)
             cur = morties.index(m["id"]) if m["id"] in morties else 0
             ch, ci = imgui.combo(f"##stm{i}", cur,
-                                 [f"{(loc.get(x) or x)} · {x}" for x in morties] or ["（读不到）"])
+                                 [self.morty_label(loc, x) for x in morties] or ["（读不到）"])
             if ch and morties:
                 m["id"] = morties[ci]
             imgui.same_line()
