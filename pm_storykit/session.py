@@ -371,7 +371,13 @@ class Session:
         mani: dict = {}
         mani_path = out / "Aliases" / "rat" / platform / "manifest.json"
         if update_manifest:
+            # 底稿依次找：已经导过的那份 → 输出目录里放的 → **源里的**。
+            #
+            # 最后这条最关键：全新目录下前面两条都不存在，原来是空手而归，
+            # 于是 mani 一直是 {}、manifest 根本不写 —— 而没有 manifest 的
+            # CDN 目录是废的（游戏先拉 manifest 才知道哪个包是新的）。踩过。
             for cand in [
+                mani_path,
                 Path("cdn/Aliases/rat") / platform / "manifest.json",
                 out / "manifest.json",
             ]:
@@ -381,6 +387,21 @@ class Session:
                         break
                     except Exception:  # noqa: BLE001
                         pass
+            if not mani:
+                # 从源里读（哪个容器有就用哪个）
+                for c in self.source.containers:
+                    for n in c.names():
+                        if not n.endswith("manifest.json") or "AssetBundles/" not in n:
+                            continue
+                        try:
+                            cand = json.loads(c.read(n))
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if not isinstance(cand, dict):
+                            continue
+                        real = len([k for k, v in cand.items() if isinstance(v, dict)])
+                        if real > len([k for k, v in mani.items() if isinstance(v, dict)]):
+                            mani = cand      # 取条目最多的那份（真清单）
 
         for name, b in self.modified.items():
             (target / f"{name}.assetbundle").write_bytes(b.save())
